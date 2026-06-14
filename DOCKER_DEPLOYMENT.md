@@ -1,6 +1,6 @@
 # Aeon Docker 部署指南
 
-本指南介绍如何使用 Docker 和 Docker Compose 部署 Aeon 应用。
+本指南介绍如何使用 Docker 和 Docker Compose 部署 Aeon 应用，支持多种存储模式。
 
 ## 📋 前置要求
 
@@ -9,177 +9,472 @@
 - 2GB+ 可用内存
 - 10GB+ 可用磁盘空间
 
+## 🗂️ 存储模式选择
+
+Aeon 支持三种存储模式：
+
+| 模式 | 描述 | 适用场景 | Docker 部署 |
+|------|------|---------|------------|
+| **Supabase** | 纯 Supabase Storage | 小型项目、快速部署 | ✅ 默认，无需额外配置 |
+| **MinIO** | 自托管对象存储 | 大文件、完全自托管 | ✅ 包含 MinIO 容器 |
+| **Hybrid** | Supabase DB + MinIO 文件 | 平衡方案，推荐 | ✅ 包含 MinIO 容器 |
+
+---
+
 ## 🚀 快速开始
 
-### 1. 准备环境变量
+### 方式 1：仅 Supabase 模式（默认）
+
+适合快速部署，无需自托管文件存储。
 
 ```bash
-# 复制环境变量模板
+# 1. 复制环境变量
 cp .env.example .env
 
-# 编辑 .env 文件，填入你的配置
+# 2. 编辑 .env，填入 Supabase 配置
 nano .env
+
+# 必填项：
+# NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+# DATABASE_URL=postgresql://...
+# NEXT_PUBLIC_STORAGE_TYPE=supabase
+
+# 3. 启动应用（仅 App 服务）
+docker-compose up -d app
+
+# 4. 查看日志
+docker-compose logs -f app
+
+# 5. 访问应用
+# http://localhost:3000
 ```
 
-**必填环境变量**：
+### 方式 2：MinIO 混合模式（推荐生产环境）
+
+包含自托管 MinIO 对象存储，适合大文件或完全自托管。
 
 ```bash
+# 1. 复制环境变量
+cp .env.example .env
+
+# 2. 编辑 .env
+nano .env
+
+# 必填项：
+# NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+# DATABASE_URL=postgresql://...
+
+# MinIO 配置：
+# NEXT_PUBLIC_STORAGE_TYPE=hybrid  # 或 minio
+# NEXT_PUBLIC_MINIO_ENDPOINT=minio
+# NEXT_PUBLIC_MINIO_PORT=9000
+# NEXT_PUBLIC_MINIO_ACCESS_KEY=minioadmin
+# NEXT_PUBLIC_MINIO_SECRET_KEY=minioadmin  # ⚠️ 生产环境必须修改
+# MINIO_ROOT_USER=minioadmin
+# MINIO_ROOT_PASSWORD=minioadmin  # ⚠️ 生产环境必须修改
+
+# 3. 启动所有服务（App + MinIO）
+docker-compose --profile with-minio up -d
+
+# 4. 查看服务状态
+docker-compose ps
+
+# 5. 访问
+# - 应用：http://localhost:3000
+# - MinIO Console：http://localhost:9001（管理界面）
+```
+
+### 方式 3：完整部署（App + MinIO + Nginx）
+
+包含 Nginx 反向代理，支持 SSL。
+
+```bash
+# 1. 配置环境变量（同方式 2）
+cp .env.example .env
+nano .env
+
+# 2. 创建 Nginx 配置
+mkdir -p nginx
+# 创建 nginx/nginx.conf（见下文配置示例）
+
+# 3. 启动所有服务
+docker-compose --profile with-minio --profile with-nginx up -d
+
+# 4. 访问
+# - HTTP：http://localhost:80
+# - HTTPS：https://localhost:443
+# - MinIO Console：http://localhost:9001
+```
+
+---
+
+## 🔧 环境变量配置
+
+### 必需环境变量
+
+```bash
+# Supabase（必需）
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
 DATABASE_URL=postgresql://postgres:password@db.your-project.supabase.co:5432/postgres
+
+# Application（必需）
 NEXT_PUBLIC_APP_URL=https://your-domain.com
 ```
 
-### 2. 构建并启动
+### 存储模式配置
+
+#### A. Supabase 模式（默认）
 
 ```bash
-# 使用 Docker Compose 一键启动
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f app
-
-# 检查运行状态
-docker-compose ps
+NEXT_PUBLIC_STORAGE_TYPE=supabase
+# 无需其他配置
 ```
 
-### 3. 验证部署
-
-访问 http://localhost:3000，你应该能看到登录页面。
-
-## 🏗️ 构建选项
-
-### 单独构建镜像
+#### B. Hybrid 模式（推荐）
 
 ```bash
-# 构建镜像
-docker build -t aeon:latest .
+NEXT_PUBLIC_STORAGE_TYPE=hybrid
 
-# 运行容器
-docker run -d \
-  --name aeon-app \
-  -p 3000:3000 \
-  --env-file .env \
-  aeon:latest
+# MinIO 连接（Docker 内部）
+NEXT_PUBLIC_MINIO_ENDPOINT=minio
+NEXT_PUBLIC_MINIO_PORT=9000
+NEXT_PUBLIC_MINIO_USE_SSL=false
+
+# MinIO 认证
+NEXT_PUBLIC_MINIO_ACCESS_KEY=minioadmin
+NEXT_PUBLIC_MINIO_SECRET_KEY=minioadmin  # ⚠️ 生产环境必须修改
+
+# MinIO 管理员账号
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=minioadmin  # ⚠️ 生产环境必须修改
+
+# MinIO 桶名称
+NEXT_PUBLIC_MINIO_BUCKET=aeon-photos
 ```
 
-### 使用自定义标签
+#### C. MinIO 模式（纯自托管）
 
 ```bash
-# 构建带版本标签的镜像
-docker build -t aeon:1.0.0 .
-docker build -t aeon:latest .
-
-# 推送到 Docker Hub
-docker tag aeon:latest your-username/aeon:latest
-docker push your-username/aeon:latest
+NEXT_PUBLIC_STORAGE_TYPE=minio
+# 其他配置同 Hybrid 模式
 ```
 
-## 🔧 配置说明
+---
 
-### Docker Compose 服务
+## 📊 Docker Compose 服务说明
 
-#### app 服务
-- **端口**: 3000
-- **重启策略**: unless-stopped
-- **健康检查**: 每 30 秒检查一次
-- **环境变量**: 从 .env 文件加载
+### 服务列表
 
-#### nginx 服务（可选）
-- **端口**: 80 (HTTP), 443 (HTTPS)
-- **作用**: 反向代理、SSL 终止、负载均衡
+| 服务 | Profile | 端口 | 说明 |
+|------|---------|------|------|
+| `app` | default | 3000 | Next.js 应用 |
+| `minio` | with-minio | 9000, 9001 | MinIO 对象存储 |
+| `minio-init` | with-minio | - | MinIO 初始化（一次性）|
+| `nginx` | with-nginx | 80, 443 | Nginx 反向代理 |
 
-启动 nginx 服务：
+### Profile 使用
 
 ```bash
-# 使用 nginx profile
-docker-compose --profile with-nginx up -d
+# 仅启动 App
+docker-compose up -d app
+
+# App + MinIO
+docker-compose --profile with-minio up -d
+
+# App + MinIO + Nginx
+docker-compose --profile with-minio --profile with-nginx up -d
+
+# 停止特定 profile
+docker-compose --profile with-minio down
 ```
 
-### 环境变量配置
+---
 
-| 变量 | 必需 | 说明 |
-|------|------|------|
-| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase 项目 URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase 匿名密钥 |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase 服务密钥 |
-| `DATABASE_URL` | ✅ | PostgreSQL 连接字符串 |
-| `NEXT_PUBLIC_APP_URL` | ✅ | 应用访问 URL |
-| `NODE_ENV` | ❌ | 默认 production |
+## 🗄️ MinIO 配置与使用
 
-## 📊 监控与日志
+### 访问 MinIO Console
+
+启动后访问：http://localhost:9001
+
+**默认登录**：
+- Username: `minioadmin`
+- Password: `minioadmin`
+
+⚠️ **生产环境必须修改默认密码！**
+
+### 手动创建桶（如果自动初始化失败）
+
+```bash
+# 方式 1: 使用 MinIO Console（推荐）
+# 登录后点击 "Buckets" → "Create Bucket" → 输入 "aeon-photos"
+
+# 方式 2: 使用 mc 命令行
+docker exec -it aeon-minio-init sh
+mc alias set myminio http://minio:9000 minioadmin minioadmin
+mc mb myminio/aeon-photos
+mc anonymous set download myminio/aeon-photos
+```
+
+### MinIO 数据持久化
+
+数据存储在 Docker Volume：`aeon-minio-data`
+
+```bash
+# 查看数据卷
+docker volume inspect aeon-minio-data
+
+# 备份数据
+docker run --rm -v aeon-minio-data:/data -v $(pwd):/backup \
+  alpine tar czf /backup/minio-backup.tar.gz /data
+
+# 恢复数据
+docker run --rm -v aeon-minio-data:/data -v $(pwd):/backup \
+  alpine tar xzf /backup/minio-backup.tar.gz -C /
+```
+
+---
+
+## 🛡️ 生产环境安全配置
+
+### 1. 修改 MinIO 默认密码
+
+编辑 `.env`：
+
+```bash
+# ⚠️ 使用强密码（至少 20 字符）
+MINIO_ROOT_USER=your_admin_username
+MINIO_ROOT_PASSWORD=your_strong_password_here
+
+NEXT_PUBLIC_MINIO_ACCESS_KEY=your_app_access_key
+NEXT_PUBLIC_MINIO_SECRET_KEY=your_app_secret_key
+```
+
+### 2. 启用 MinIO SSL
+
+```bash
+# 生成 SSL 证书
+mkdir -p minio/certs
+# 将证书放入 minio/certs/public.crt 和 minio/certs/private.key
+
+# 修改 docker-compose.yml
+minio:
+  volumes:
+    - ./minio/certs:/root/.minio/certs:ro
+  environment:
+    - MINIO_OPTS=--address :9000 --console-address :9001 --certs-dir /root/.minio/certs
+
+# 修改 .env
+NEXT_PUBLIC_MINIO_USE_SSL=true
+NEXT_PUBLIC_MINIO_ENDPOINT=your-domain.com
+```
+
+### 3. 限制 MinIO 桶权限
+
+默认配置为 `download`（公开读取），生产环境建议设为私有：
+
+```bash
+docker exec aeon-minio mc anonymous set none myminio/aeon-photos
+```
+
+然后应用将通过 Pre-signed URL 访问。
+
+### 4. 资源限制
+
+编辑 `docker-compose.yml`，添加资源限制：
+
+```yaml
+services:
+  app:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  minio:
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+```
+
+---
+
+## 📈 监控与日志
 
 ### 查看日志
 
 ```bash
-# 查看所有服务日志
+# 所有服务
 docker-compose logs -f
 
-# 查看特定服务日志
+# 特定服务
 docker-compose logs -f app
+docker-compose logs -f minio
 
-# 查看最近 100 行日志
+# 最近 100 行
 docker-compose logs --tail=100 app
 ```
 
 ### 健康检查
 
 ```bash
-# 检查容器健康状态
+# 查看容器健康状态
 docker-compose ps
 
-# 手动触发健康检查
-docker exec aeon-app wget -qO- http://localhost:3000/api/health
+# App 健康检查
+curl http://localhost:3000
+
+# MinIO 健康检查
+curl http://localhost:9000/minio/health/live
 ```
 
 ### 资源监控
 
 ```bash
-# 查看容器资源使用
-docker stats aeon-app
+# 查看资源使用
+docker stats aeon-app aeon-minio
 
-# 查看详细信息
-docker inspect aeon-app
+# MinIO 存储使用
+docker exec aeon-minio df -h /data
 ```
 
-## 🔄 更新部署
+---
 
-### 滚动更新
+## 🔄 更新与维护
+
+### 更新应用
 
 ```bash
 # 1. 拉取最新代码
 git pull origin main
 
-# 2. 重新构建镜像
-docker-compose build
+# 2. 重新构建
+docker-compose build app
 
-# 3. 滚动更新（零停机）
+# 3. 滚动更新
 docker-compose up -d --no-deps --build app
 
 # 4. 清理旧镜像
 docker image prune -f
 ```
 
-### 回滚部署
+### 更新 MinIO
 
 ```bash
-# 使用之前的镜像标签
-docker-compose down
-docker run -d \
-  --name aeon-app \
-  -p 3000:3000 \
-  --env-file .env \
-  aeon:previous-version
+# 1. 停止 MinIO
+docker-compose stop minio
 
-# 或者使用 Docker Compose
-# 修改 docker-compose.yml 中的镜像标签后
-docker-compose up -d
+# 2. 拉取最新镜像
+docker pull minio/minio:latest
+
+# 3. 重启（数据保留在 volume 中）
+docker-compose --profile with-minio up -d minio
 ```
 
-## 🛡️ 生产环境优化
+---
 
-### 1. 使用 Nginx 反向代理
+## 🐛 故障排查
+
+### MinIO 无法启动
+
+```bash
+# 检查日志
+docker-compose logs minio
+
+# 常见问题：
+# 1. 端口冲突（9000/9001 已被占用）
+# 解决：修改 docker-compose.yml 端口映射
+
+# 2. 数据卷权限问题
+docker volume rm aeon-minio-data
+docker-compose --profile with-minio up -d
+```
+
+### MinIO 桶未自动创建
+
+```bash
+# 查看初始化日志
+docker-compose logs minio-init
+
+# 手动创建
+docker exec -it aeon-minio mc alias set myminio http://localhost:9000 minioadmin minioadmin
+docker exec -it aeon-minio mc mb myminio/aeon-photos
+docker exec -it aeon-minio mc anonymous set download myminio/aeon-photos
+```
+
+### App 无法连接 MinIO
+
+```bash
+# 1. 检查网络连通性
+docker exec aeon-app ping minio
+
+# 2. 检查环境变量
+docker exec aeon-app env | grep MINIO
+
+# 3. 检查 MinIO 是否健康
+docker-compose ps minio
+```
+
+### 照片上传失败
+
+```bash
+# 1. 检查存储模式
+docker exec aeon-app env | grep STORAGE_TYPE
+
+# 2. 检查 MinIO 桶权限
+docker exec aeon-minio mc anonymous get myminio/aeon-photos
+
+# 3. 查看应用日志
+docker-compose logs -f app | grep -i "upload\|storage\|minio"
+```
+
+---
+
+## 🧹 清理与卸载
+
+### 停止服务
+
+```bash
+# 停止所有服务
+docker-compose --profile with-minio --profile with-nginx down
+
+# 仅停止不删除
+docker-compose stop
+```
+
+### 完全清理
+
+```bash
+# ⚠️ 警告：将删除所有数据
+
+# 1. 停止并删除容器
+docker-compose --profile with-minio down
+
+# 2. 删除数据卷（包括 MinIO 数据）
+docker volume rm aeon-minio-data aeon-app-data
+
+# 3. 删除镜像
+docker rmi aeon:latest minio/minio:latest
+
+# 4. 清理网络
+docker network rm aeon-network
+```
+
+---
+
+## 📦 Nginx 配置示例
 
 创建 `nginx/nginx.conf`：
 
@@ -193,30 +488,26 @@ http {
         server app:3000;
     }
 
+    upstream minio {
+        server minio:9000;
+    }
+
+    # HTTP → HTTPS 重定向
     server {
         listen 80;
         server_name your-domain.com;
-
-        # 重定向到 HTTPS
         return 301 https://$server_name$request_uri;
     }
 
+    # HTTPS - App
     server {
         listen 443 ssl http2;
         server_name your-domain.com;
 
-        # SSL 配置
         ssl_certificate /etc/nginx/ssl/cert.pem;
         ssl_certificate_key /etc/nginx/ssl/key.pem;
         ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_ciphers HIGH:!aNULL:!MD5;
 
-        # 安全响应头
-        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-        add_header X-Frame-Options "DENY" always;
-        add_header X-Content-Type-Options "nosniff" always;
-
-        # 代理配置
         location / {
             proxy_pass http://app;
             proxy_http_version 1.1;
@@ -224,181 +515,27 @@ http {
             proxy_set_header Connection 'upgrade';
             proxy_set_header Host $host;
             proxy_cache_bypass $http_upgrade;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
         }
+    }
 
-        # 静态资源缓存
-        location /_next/static {
-            proxy_pass http://app;
-            add_header Cache-Control "public, max-age=31536000, immutable";
+    # HTTPS - MinIO Console
+    server {
+        listen 443 ssl http2;
+        server_name minio.your-domain.com;
+
+        ssl_certificate /etc/nginx/ssl/cert.pem;
+        ssl_certificate_key /etc/nginx/ssl/key.pem;
+
+        location / {
+            proxy_pass http://minio:9001;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
         }
     }
 }
 ```
 
-### 2. 资源限制
-
-修改 `docker-compose.yml`：
-
-```yaml
-services:
-  app:
-    # ... 其他配置
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '1'
-          memory: 1G
-```
-
-### 3. 日志轮转
-
-```yaml
-services:
-  app:
-    # ... 其他配置
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-```
-
-## 🐛 故障排查
-
-### 容器无法启动
-
-```bash
-# 查看详细错误信息
-docker-compose logs app
-
-# 检查环境变量
-docker-compose config
-
-# 进入容器调试
-docker exec -it aeon-app sh
-```
-
-### 连接 Supabase 失败
-
-```bash
-# 测试数据库连接
-docker exec aeon-app wget -qO- "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/"
-
-# 检查网络连通性
-docker exec aeon-app ping db.your-project.supabase.co
-```
-
-### 端口冲突
-
-```bash
-# 查看端口占用
-netstat -tulnp | grep 3000
-
-# 修改 docker-compose.yml 中的端口映射
-ports:
-  - "8080:3000"  # 使用 8080 端口
-```
-
-### 内存不足
-
-```bash
-# 查看容器内存使用
-docker stats aeon-app
-
-# 增加内存限制
-# 修改 docker-compose.yml
-deploy:
-  resources:
-    limits:
-      memory: 4G
-```
-
-## 🧹 清理与维护
-
-### 停止并删除容器
-
-```bash
-# 停止所有服务
-docker-compose down
-
-# 删除数据卷（谨慎！）
-docker-compose down -v
-
-# 删除所有相关镜像
-docker-compose down --rmi all
-```
-
-### 清理 Docker 资源
-
-```bash
-# 清理未使用的镜像
-docker image prune -a
-
-# 清理未使用的容器
-docker container prune
-
-# 清理未使用的网络
-docker network prune
-
-# 清理所有未使用资源
-docker system prune -a --volumes
-```
-
-## 📦 数据备份
-
-### 备份环境变量
-
-```bash
-# 备份 .env 文件（不要提交到 Git）
-cp .env .env.backup
-```
-
-### 备份 Supabase 数据
-
-Supabase 自动备份数据库，也可以手动导出：
-
-```bash
-# 使用 Supabase CLI 备份
-supabase db dump --linked > backup.sql
-
-# 或使用 pg_dump
-pg_dump "$DATABASE_URL" > backup.sql
-```
-
-## 🔐 安全建议
-
-1. **不要在镜像中包含 .env 文件**
-   - 使用 .env 或环境变量注入
-   - 使用 Docker secrets（Swarm 模式）
-
-2. **定期更新基础镜像**
-   ```bash
-   docker pull node:18-alpine
-   docker-compose build --no-cache
-   ```
-
-3. **使用非 root 用户运行**
-   - Dockerfile 中已配置 nextjs 用户
-
-4. **扫描镜像漏洞**
-   ```bash
-   docker scan aeon:latest
-   ```
-
-5. **限制容器权限**
-   ```yaml
-   services:
-     app:
-       security_opt:
-         - no-new-privileges:true
-       read_only: true
-   ```
+---
 
 ## 📞 支持
 
@@ -409,4 +546,5 @@ pg_dump "$DATABASE_URL" > backup.sql
 
 ---
 
-**最后更新**：2026-06-14
+**最后更新**：2026-06-14  
+**版本**：1.1.0（新增 MinIO 支持）
