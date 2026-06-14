@@ -1,0 +1,24 @@
+Dockerfile
+.dockerignore
+node_modules
+npm-debug.log
+README.md
+.next
+.git
+.gitignore
+*.md
+docs
+.env*
+!.env.example
+
+# Exclude SQL files from root
+*.sql
+
+# Exclude development files
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
+.vscode
+.idea
