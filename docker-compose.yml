@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # Next.js Application
+  # Next.js 应用
   app:
     build:
       context: .
@@ -10,27 +10,6 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    environment:
-      # Supabase Configuration
-      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-
-      # Database
-      - DATABASE_URL=${DATABASE_URL}
-
-      # Application
-      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-      - NODE_ENV=production
-
-      # Storage Configuration (Optional: Hybrid/MinIO mode)
-      - NEXT_PUBLIC_STORAGE_TYPE=${NEXT_PUBLIC_STORAGE_TYPE:-supabase}
-      - NEXT_PUBLIC_MINIO_ENDPOINT=${NEXT_PUBLIC_MINIO_ENDPOINT:-minio}
-      - NEXT_PUBLIC_MINIO_PORT=${NEXT_PUBLIC_MINIO_PORT:-9000}
-      - NEXT_PUBLIC_MINIO_ACCESS_KEY=${NEXT_PUBLIC_MINIO_ACCESS_KEY:-minioadmin}
-      - NEXT_PUBLIC_MINIO_SECRET_KEY=${NEXT_PUBLIC_MINIO_SECRET_KEY:-minioadmin}
-      - NEXT_PUBLIC_MINIO_BUCKET=${NEXT_PUBLIC_MINIO_BUCKET:-aeon-photos}
-      - NEXT_PUBLIC_MINIO_USE_SSL=${NEXT_PUBLIC_MINIO_USE_SSL:-false}
     env_file:
       - .env
     networks:
@@ -39,30 +18,25 @@ services:
       minio:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
-    labels:
-      - "com.aeon.service=app"
-      - "com.aeon.version=1.0.0"
     profiles:
       - default
       - with-minio
 
-  # MinIO Object Storage (Optional)
+  # MinIO 对象存储（可选）
   minio:
     image: minio/minio:latest
     container_name: aeon-minio
     restart: unless-stopped
     ports:
-      - "9000:9000"     # MinIO API
-      - "9001:9001"     # MinIO Console
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
     environment:
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
-      - MINIO_BROWSER_REDIRECT_URL=${MINIO_BROWSER_REDIRECT_URL:-http://localhost:9001}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:
       - minio-data:/data
     command: server /data --console-address ":9001"
@@ -71,15 +45,12 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
-      timeout: 20s
+      timeout: 10s
       retries: 3
-      start_period: 30s
-    labels:
-      - "com.aeon.service=minio"
     profiles:
       - with-minio
 
-  # MinIO Client (mc) - 初始化桶（一次性任务）
+  # MinIO 初始化（自动创建桶）
   minio-init:
     image: minio/mc:latest
     container_name: aeon-minio-init
@@ -90,16 +61,15 @@ services:
       - aeon-network
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
-      /usr/bin/mc mb myminio/${NEXT_PUBLIC_MINIO_BUCKET:-aeon-photos} --ignore-existing;
-      /usr/bin/mc anonymous set download myminio/${NEXT_PUBLIC_MINIO_BUCKET:-aeon-photos};
-      echo 'MinIO bucket initialized successfully';
+      mc alias set minio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      mc mb minio/${NEXT_PUBLIC_MINIO_BUCKET:-aeon-photos} --ignore-existing;
+      mc anonymous set download minio/${NEXT_PUBLIC_MINIO_BUCKET:-aeon-photos};
       exit 0;
       "
     profiles:
       - with-minio
 
-  # Nginx Reverse Proxy (Optional)
+  # Nginx 反向代理（可选）
   nginx:
     image: nginx:alpine
     container_name: aeon-nginx
@@ -114,21 +84,13 @@ services:
       - app
     networks:
       - aeon-network
-    labels:
-      - "com.aeon.service=nginx"
     profiles:
       - with-nginx
 
 networks:
   aeon-network:
     driver: bridge
-    name: aeon-network
 
-# Volumes for persistent data
 volumes:
   minio-data:
     driver: local
-    name: aeon-minio-data
-  app-data:
-    driver: local
-    name: aeon-app-data
