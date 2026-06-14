@@ -6,6 +6,7 @@
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
 ![React](https://img.shields.io/badge/React-19-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
+![Docker](https://img.shields.io/badge/Docker-ready-brightgreen)
 
 ## ✨ 特性
 
@@ -17,6 +18,7 @@
 - 🖼️ **照片画廊** - 瀑布流布局、虚拟滚动优化
 - 🔒 **企业级安全** - RLS、多层文件验证、XSS 防护
 - 🎨 **现代化 UI** - shadcn/ui + Tailwind CSS v4
+- 🚀 **一键部署** - Docker + 自动数据库迁移
 
 ## 🛠️ 技术栈
 
@@ -39,24 +41,18 @@
 ### 表单与验证
 - **React Hook Form** - 表单管理
 - **Zod** - Schema 验证
-- **@hookform/resolvers** - 表单验证集成
 
 ### 图片处理
 - **browser-image-compression** - 客户端图片压缩
 - **Sharp** - 服务端图片处理
 
-### 开发工具
-- **ESLint** - 代码检查
-- **Turbopack** - 快速构建（Next.js 16 默认）
-
 ## 📋 前置要求
 
-- **Node.js** >= 18.x
-- **npm** >= 9.x
+- **Docker** >= 20.10
+- **Docker Compose** >= 2.0
 - **Supabase 账号** - [注册地址](https://supabase.com)
-- **Docker** (可选，用于本地开发)
 
-## 🚀 快速开始
+## 🚀 快速开始（Docker 部署，推荐）
 
 ### 1. 克隆项目
 
@@ -65,60 +61,108 @@ git clone https://github.com/your-username/aeon.git
 cd aeon
 ```
 
-### 2. 安装依赖
+### 2. 创建 Supabase 项目
+
+1. 访问 [supabase.com](https://supabase.com) 并登录
+2. 点击 "New Project"
+3. 填写项目信息并创建
+
+### 3. 配置环境变量
+
+```bash
+# 复制环境变量模板
+cp .env.example .env
+
+# 编辑 .env 文件
+nano .env
+```
+
+**获取 Supabase 配置**（从 Supabase Dashboard）：
+
+1. 进入 **Settings → API**，获取：
+   - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
+   - `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY`
+
+2. 进入 **Settings → Database**，获取：
+   - `Connection string` (Transaction mode) → `DATABASE_URL`
+
+**必填配置**：
+
+```bash
+# Supabase 配置
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
+
+# 数据库
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project.supabase.co:5432/postgres
+
+# 应用
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# 存储模式（可选，默认 supabase）
+NEXT_PUBLIC_STORAGE_TYPE=supabase
+```
+
+### 4. 一键启动 🎉
+
+```bash
+# 启动应用（自动执行数据库迁移）
+docker-compose up -d
+
+# 查看启动日志
+docker-compose logs -f app
+```
+
+**启动过程**（自动完成）：
+```
+🚀 Aeon 启动脚本
+⏳ 等待数据库连接...
+✅ 数据库连接成功
+🔧 执行数据库迁移...
+  ✅ 启用 RLS
+  ✅ 创建安全策略
+  ✅ 创建 Storage 策略
+✅ 数据库迁移完成
+🎉 启动 Next.js 应用...
+```
+
+### 5. 访问应用
+
+打开浏览器访问：http://localhost:3000
+
+**首次访问**：
+1. 点击"注册"创建账号
+2. 使用邮箱和密码注册
+3. 登录后开始使用
+
+---
+
+## 💻 本地开发（无 Docker）
+
+如果你想在本地开发而不使用 Docker：
+
+### 1. 安装依赖
 
 ```bash
 npm install
 ```
 
-### 3. 配置环境变量
-
-复制 `.env.example` 为 `.env.local`：
+### 2. 配置环境变量
 
 ```bash
 cp .env.example .env.local
+nano .env.local
 ```
 
-编辑 `.env.local`，填入你的 Supabase 配置：
+### 3. 手动执行数据库迁移
 
-```bash
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
+在 Supabase Dashboard → SQL Editor 中依次执行：
+1. `supabase/migrations/001_enable_rls.sql`
+2. `supabase/migrations/002_storage_policies.sql`
 
-# Database
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project.supabase.co:5432/postgres
-
-# App
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-```
-
-### 4. 配置 Supabase
-
-#### 4.1 连接到你的 Supabase 项目
-
-```bash
-# 安装 Supabase CLI（如果尚未安装）
-npm install -g supabase
-
-# 连接到远程项目
-supabase link --project-ref your-project-ref
-```
-
-#### 4.2 执行数据库迁移
-
-```bash
-# 推送 schema 到数据库
-npm run db:push
-
-# 或者手动执行 SQL
-# 在 Supabase Dashboard → SQL Editor 中依次执行：
-# 1. supabase/migrations/001_enable_rls.sql
-# 2. supabase/migrations/002_storage_policies.sql
-```
-
-#### 4.3 创建 Storage 桶
+### 4. 创建 Storage 桶
 
 在 Supabase Dashboard → Storage 中创建桶：
 - **Bucket name**: `record-photos`
@@ -134,33 +178,37 @@ npm run dev
 
 打开 [http://localhost:3000](http://localhost:3000) 查看应用。
 
-## 📦 Docker 部署
+---
 
-### 使用 Docker Compose
+## 📦 Docker 部署模式
 
-项目包含 `docker-compose.yml` 配置文件，可以一键启动完整环境。
-
-```bash
-# 构建并启动
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
-
-# 停止
-docker-compose down
-```
-
-访问 [http://localhost:3000](http://localhost:3000)
-
-### 环境变量配置
-
-Docker 部署时，环境变量通过 `.env` 文件传递：
+### 模式 A：仅 Supabase Storage（默认）
 
 ```bash
-cp .env.example .env
-# 编辑 .env 填入生产环境配置
+# .env 配置
+NEXT_PUBLIC_STORAGE_TYPE=supabase
+
+# 启动
+docker-compose up -d app
 ```
+
+### 模式 B：Supabase + MinIO（自托管存储）
+
+```bash
+# .env 配置
+NEXT_PUBLIC_STORAGE_TYPE=hybrid  # 或 minio
+
+# 启动（App + MinIO）
+docker-compose --profile with-minio up -d
+
+# 访问：
+# - 应用：http://localhost:3000
+# - MinIO Console：http://localhost:9001
+```
+
+详见：[DOCKER_QUICK_START.md](./DOCKER_QUICK_START.md)
+
+---
 
 ## 🗄️ 数据库 Schema
 
@@ -170,15 +218,21 @@ cp .env.example .env
 - **records** - 记录表（标题、内容、日期、标签）
 - **photos** - 照片表（原图路径、压缩图路径、大小）
 
-### 生成新迁移
+### Schema 更新
+
+如果需要修改数据库结构：
 
 ```bash
-# 修改 src/lib/db/schema.ts 后
-npx drizzle-kit generate
+# 1. 修改 src/lib/db/schema.ts
 
-# 推送到数据库
-npx drizzle-kit push
+# 2. 生成新迁移
+npm run db:generate
+
+# 3. 推送到数据库
+npm run db:push
 ```
+
+---
 
 ## 🔒 安全特性
 
@@ -198,7 +252,7 @@ npx drizzle-kit push
 # 1. 依赖安全扫描
 npm audit
 
-# 2. 环境变量检查
+# 2. 环境变量检查（确保 .env 不在 Git 中）
 git log --all --full-history -- .env.local
 
 # 3. 完整审计清单
@@ -206,6 +260,8 @@ git log --all --full-history -- .env.local
 ```
 
 详见：[SECURITY.md](./SECURITY.md)
+
+---
 
 ## 📜 可用脚本
 
@@ -221,7 +277,15 @@ npm run db:generate  # 生成 migration
 npm run db:push      # 推送 schema 到数据库
 npm run db:pull      # 从数据库拉取 schema
 npm run db:studio    # 打开 Drizzle Studio
+
+# Docker
+docker-compose up -d              # 启动应用
+docker-compose --profile with-minio up -d  # 启动应用 + MinIO
+docker-compose logs -f app        # 查看日志
+docker-compose down               # 停止服务
 ```
+
+---
 
 ## 📁 项目结构
 
@@ -230,30 +294,30 @@ Aeon/
 ├── src/
 │   ├── app/                    # Next.js App Router
 │   │   ├── (dashboard)/        # 主应用路由组
-│   │   │   ├── calendar/
-│   │   │   ├── gallery/
-│   │   │   ├── records/
-│   │   │   ├── settings/
-│   │   │   ├── statistics/
-│   │   │   └── timeline/
+│   │   │   ├── calendar/       # 月历视图
+│   │   │   ├── gallery/        # 照片画廊
+│   │   │   ├── records/        # 记录管理
+│   │   │   ├── settings/       # 用户设置
+│   │   │   ├── statistics/     # 统计仪表盘
+│   │   │   └── timeline/       # 时间线
 │   │   ├── admin/              # 后台管理
 │   │   ├── auth/               # 认证回调
 │   │   ├── login/              # 登录页
 │   │   └── register/           # 注册页
 │   ├── components/             # React 组件
 │   │   ├── ui/                 # shadcn/ui 组件
-│   │   ├── admin/
-│   │   ├── auth/
-│   │   ├── dashboard/
-│   │   ├── gallery/
-│   │   ├── navigation/
-│   │   └── records/
+│   │   ├── admin/              # 后台组件
+│   │   ├── auth/               # 认证组件
+│   │   ├── dashboard/          # 仪表盘组件
+│   │   ├── gallery/            # 画廊组件
+│   │   ├── navigation/         # 导航组件
+│   │   └── records/            # 记录组件
 │   ├── lib/                    # 核心库
 │   │   ├── config/             # 配置文件
-│   │   ├── db/                 # 数据库相关
+│   │   ├── db/                 # 数据库
 │   │   │   ├── queries/        # 查询函数
-│   │   │   ├── client.ts
-│   │   │   └── schema.ts
+│   │   │   ├── client.ts       # 数据库客户端
+│   │   │   └── schema.ts       # Schema 定义
 │   │   ├── storage/            # 存储抽象层
 │   │   ├── supabase/           # Supabase 客户端
 │   │   ├── utils/              # 工具函数
@@ -264,6 +328,9 @@ Aeon/
 │   └── middleware.ts           # Next.js 中间件
 ├── supabase/
 │   └── migrations/             # 数据库迁移文件
+├── scripts/                    # 自动化脚本
+│   ├── apply-migrations.js     # 自动迁移脚本
+│   └── entrypoint.sh           # Docker 启动脚本
 ├── public/                     # 静态资源
 ├── docs/                       # 项目文档
 ├── docker-compose.yml          # Docker Compose 配置
@@ -272,6 +339,8 @@ Aeon/
 ├── SECURITY.md                 # 安全指南
 └── README.md                   # 本文件
 ```
+
+---
 
 ## 🤝 贡献指南
 
@@ -292,9 +361,13 @@ Aeon/
 - 编写清晰的 commit message
 - 添加必要的注释
 
+---
+
 ## 📄 许可证
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+
+---
 
 ## 🙏 致谢
 
@@ -304,12 +377,15 @@ Aeon/
 - [Tailwind CSS](https://tailwindcss.com/)
 - [Drizzle ORM](https://orm.drizzle.team/)
 
+---
+
 ## 📞 联系方式
 
 - **Issues**: [GitHub Issues](https://github.com/your-username/aeon/issues)
 - **Email**: your-email@example.com
-- **安全问题**: 请发送邮件至 security@yourapp.com
 
 ---
 
 **Built with ❤️ using Next.js 16 and Supabase**
+
+🎉 **一键部署，3 分钟启动！**
