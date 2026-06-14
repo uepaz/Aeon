@@ -3,7 +3,7 @@ FROM node:18-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat bash curl postgresql-client
 WORKDIR /app
 
 # Copy package files
@@ -26,6 +26,9 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 
+# Install bash and curl for entrypoint script
+RUN apk add --no-cache bash curl
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -38,6 +41,13 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+# Copy migration files and scripts
+COPY --from=builder /app/supabase ./supabase
+COPY --from=builder /app/scripts ./scripts
+
+# Make entrypoint script executable
+RUN chmod +x /app/scripts/entrypoint.sh
+
 # Set correct permissions
 RUN chown -R nextjs:nodejs /app
 
@@ -48,4 +58,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+# Use entrypoint script for auto-migration
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]

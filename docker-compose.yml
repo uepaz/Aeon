@@ -26,7 +26,7 @@ services:
       - default
       - with-minio
 
-  # MinIO 对象存储（可选）
+  # MinIO 对象存储
   minio:
     image: minio/minio:latest
     container_name: aeon-minio
