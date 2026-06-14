@@ -70,12 +70,17 @@ cd aeon
 ### 3. 配置环境变量
 
 ```bash
-# 复制环境变量模板
+# Docker 部署：复制为 .env
 cp .env.example .env
 
-# 编辑 .env 文件
-nano .env
+# 本地开发：复制为 .env.local
+cp .env.example .env.local
+
+# 编辑配置文件
+nano .env  # 或 .env.local
 ```
+
+> 💡 **提示**：`.env.example` 是唯一的模板文件。根据部署方式选择目标文件名。
 
 **获取 Supabase 配置**（从 Supabase Dashboard）：
 
@@ -180,6 +185,7 @@ npm install
 ### 2. 配置环境变量
 
 ```bash
+# 本地开发使用 .env.local
 cp .env.example .env.local
 nano .env.local
 ```
