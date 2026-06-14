@@ -1,6 +1,6 @@
 # Aeon Docker 快速部署指南
 
-三种部署模式，一条命令启动。
+两种部署模式，一条命令启动。
 
 ## 🚀 快速开始
 
@@ -38,15 +38,6 @@ docker-compose --profile with-minio up -d
 # - 应用：http://localhost:3000
 # - MinIO Console：http://localhost:9001
 #   登录：minioadmin / minioadmin（⚠️ 生产环境必须修改）
-```
-
-#### 模式 C：完整部署（App + MinIO + Nginx）
-
-```bash
-# 启动所有服务
-docker-compose --profile with-minio --profile with-nginx up -d
-
-# 需要先创建 nginx/nginx.conf（见下文）
 ```
 
 ---
@@ -98,6 +89,10 @@ docker-compose down
 
 # 完全清理（⚠️ 删除所有数据）
 docker-compose down -v
+
+# 重启服务
+docker-compose restart app
+docker-compose restart minio
 ```
 
 ---
@@ -106,9 +101,9 @@ docker-compose down -v
 
 - [ ] 修改 MinIO 默认密码（`.env` 中的 `MINIO_ROOT_USER/PASSWORD`）
 - [ ] 设置强密码（至少 20 字符）
-- [ ] 配置 Nginx SSL 证书（如使用）
 - [ ] 备份数据卷：`docker volume inspect aeon-minio-data`
 - [ ] 执行安全审计（见 `SECURITY_AUDIT_CHECKLIST.md`）
+- [ ] 配置防火墙（仅开放必要端口）
 
 ---
 
@@ -119,7 +114,6 @@ docker-compose down -v
 | app | default | 3000 | Next.js 应用 |
 | minio | with-minio | 9000, 9001 | 对象存储 + 管理界面 |
 | minio-init | with-minio | - | 自动初始化桶（一次性）|
-| nginx | with-nginx | 80, 443 | 反向代理 |
 
 ---
 
@@ -133,6 +127,9 @@ docker-compose logs minio
 
 # 常见原因：端口占用
 # 解决：修改 docker-compose.yml 端口映射
+ports:
+  - "19000:9000"   # 改为其他端口
+  - "19001:9001"
 ```
 
 ### App 无法连接 MinIO
@@ -143,6 +140,9 @@ docker exec aeon-app ping minio
 
 # 检查环境变量
 docker exec aeon-app env | grep MINIO
+
+# 检查 MinIO 健康状态
+docker-compose ps minio
 ```
 
 ### 桶未自动创建
@@ -154,16 +154,8 @@ docker-compose logs minio-init
 # 手动创建
 docker exec aeon-minio mc alias set minio http://localhost:9000 minioadmin minioadmin
 docker exec aeon-minio mc mb minio/aeon-photos
+docker exec aeon-minio mc anonymous set download minio/aeon-photos
 ```
-
----
-
-## 📚 完整文档
-
-详细配置、监控、备份等请参考：
-- `README.md` - 项目总览
-- `SECURITY.md` - 安全指南
-- `SECURITY_AUDIT_CHECKLIST.md` - 上线检查清单
 
 ---
 
@@ -190,6 +182,25 @@ docker exec aeon-minio mc alias set minio http://localhost:9000 your_user your_p
 docker exec aeon-minio mc anonymous set none minio/aeon-photos
 ```
 
+### 启用 HTTPS（推荐）
+
+```bash
+# 1. 生成证书
+mkdir -p minio/certs
+# 将证书放入：
+# - minio/certs/public.crt
+# - minio/certs/private.key
+
+# 2. 修改 docker-compose.yml
+minio:
+  volumes:
+    - minio-data:/data
+    - ./minio/certs:/root/.minio/certs:ro
+
+# 3. 修改 .env
+NEXT_PUBLIC_MINIO_USE_SSL=true
+```
+
 ---
 
 ## 📊 数据备份
@@ -199,13 +210,16 @@ docker exec aeon-minio mc anonymous set none minio/aeon-photos
 docker run --rm \
   -v aeon-minio-data:/data \
   -v $(pwd):/backup \
-  alpine tar czf /backup/minio-backup.tar.gz /data
+  alpine tar czf /backup/minio-backup-$(date +%Y%m%d).tar.gz /data
 
 # 恢复数据
 docker run --rm \
   -v aeon-minio-data:/data \
   -v $(pwd):/backup \
-  alpine tar xzf /backup/minio-backup.tar.gz -C /
+  alpine tar xzf /backup/minio-backup-20260614.tar.gz -C /
+
+# 查看数据卷位置
+docker volume inspect aeon-minio-data
 ```
 
 ---
@@ -219,7 +233,7 @@ git pull origin main
 # 2. 重新构建
 docker-compose build app
 
-# 3. 滚动更新
+# 3. 滚动更新（零停机）
 docker-compose up -d --no-deps --build app
 
 # 4. 清理旧镜像
@@ -228,5 +242,96 @@ docker image prune -f
 
 ---
 
+## 📈 监控与日志
+
+```bash
+# 查看资源使用
+docker stats aeon-app aeon-minio
+
+# 查看容器详情
+docker inspect aeon-app
+
+# 查看网络
+docker network inspect aeon-network
+
+# 持续输出日志
+docker-compose logs -f --tail=100 app
+
+# 查看 MinIO 存储使用
+docker exec aeon-minio df -h /data
+```
+
+---
+
+## 🧹 清理与维护
+
+```bash
+# 停止所有服务
+docker-compose --profile with-minio down
+
+# 清理未使用的镜像
+docker image prune -a
+
+# 清理未使用的容器
+docker container prune
+
+# 清理未使用的网络
+docker network prune
+
+# 完全清理（⚠️ 包括数据）
+docker-compose down -v
+docker system prune -a --volumes
+```
+
+---
+
+## 📚 更多文档
+
+- `README.md` - 项目总览
+- `SECURITY.md` - 安全架构指南
+- `SECURITY_AUDIT_CHECKLIST.md` - 上线审计清单（100+ 项）
+
+---
+
+## 💡 生产环境推荐配置
+
+### 资源限制
+
+编辑 `docker-compose.yml`：
+
+```yaml
+services:
+  app:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  minio:
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+```
+
+### 日志轮转
+
+```yaml
+services:
+  app:
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+```
+
+---
+
 **最后更新**：2026-06-14  
-**版本**：1.2.0（精简版）
+**版本**：1.3.0（移除 Nginx）
