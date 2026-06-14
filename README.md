@@ -20,32 +20,6 @@
 - 🎨 **现代化 UI** - shadcn/ui + Tailwind CSS v4
 - 🚀 **一键部署** - Docker + 自动数据库迁移
 
-## 🛠️ 技术栈
-
-### 核心框架
-- **Next.js 16** - App Router + React Server Components
-- **React 19** - 最新特性支持
-- **TypeScript** - 类型安全
-
-### 数据库与认证
-- **Supabase** - PostgreSQL + Auth + Storage + Realtime
-- **Drizzle ORM** - 类型安全的 ORM（仅用于 schema 定义）
-
-### UI 组件
-- **shadcn/ui** - Base UI primitives (base-nova style)
-- **Tailwind CSS v4** - 原子化 CSS
-- **Lucide React** - 图标库
-- **TanStack Query** - 数据获取与缓存
-- **TanStack Virtual** - 虚拟滚动
-
-### 表单与验证
-- **React Hook Form** - 表单管理
-- **Zod** - Schema 验证
-
-### 图片处理
-- **browser-image-compression** - 客户端图片压缩
-- **Sharp** - 服务端图片处理
-
 ## 📋 前置要求
 
 - **Docker** >= 20.10
