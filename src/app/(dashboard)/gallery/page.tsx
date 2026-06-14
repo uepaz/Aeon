@@ -114,7 +114,22 @@ export default function GalleryPage() {
 
       <GalleryFilters onFilterChange={setFilters} />
 
-      <VirtualMasonry photos={photos} onPhotoClick={handlePhotoClick} />
+      <VirtualMasonry
+        items={photos}
+        renderItem={(photo, index) => (
+          <div
+            className="cursor-pointer hover:opacity-90 transition-opacity"
+            onClick={() => handlePhotoClick(index)}
+          >
+            <img
+              src={photo.url}
+              alt={photo.title || '照片'}
+              className="w-full h-auto rounded-lg"
+              loading="lazy"
+            />
+          </div>
+        )}
+      />
 
       {photos.length >= 50 && (
         <div className="flex justify-center py-8">
