@@ -1,7 +1,41 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from './src/lib/config/security-headers';
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Enable standalone output for Docker
+  output: 'standalone',
+
+  // Security headers
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: securityHeaders,
+      },
+    ];
+  },
+
+  // Image configuration
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.supabase.co',
+      },
+    ],
+    unoptimized: false,
+    dangerouslyAllowSVG: false, // Prevent SVG XSS attacks
+  },
+
+  // TypeScript configuration
+  typescript: {
+    ignoreBuildErrors: false,
+  },
+
+  // ESLint configuration
+  eslint: {
+    ignoreDuringBuilds: false,
+  },
 };
 
 export default nextConfig;

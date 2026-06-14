@@ -1,0 +1,6 @@
+-- 添加生日字段到 user_settings 表
+ALTER TABLE user_settings
+ADD COLUMN IF NOT EXISTS birthday1 DATE,
+ADD COLUMN IF NOT EXISTS birthday2 DATE,
+ADD COLUMN IF NOT EXISTS name1 TEXT,
+ADD COLUMN IF NOT EXISTS name2 TEXT;
