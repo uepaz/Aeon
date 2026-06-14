@@ -107,11 +107,33 @@ NEXT_PUBLIC_STORAGE_TYPE=supabase
 
 ### 4. 一键启动 🎉
 
+**方式 A：仅 Supabase Storage（默认，推荐小项目）**
+
 ```bash
+# .env 配置
+NEXT_PUBLIC_STORAGE_TYPE=supabase
+
 # 启动应用（自动执行数据库迁移）
-docker-compose up -d
+docker-compose up -d app
 
 # 查看启动日志
+docker-compose logs -f app
+```
+
+**方式 B：Supabase + MinIO（推荐生产环境，大文件）**
+
+```bash
+# .env 配置
+NEXT_PUBLIC_STORAGE_TYPE=hybrid  # 或 minio
+
+# MinIO 配置（使用默认值或自定义）
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=minioadmin  # ⚠️ 生产环境必须修改
+
+# 启动应用 + MinIO
+docker-compose --profile with-minio up -d
+
+# 查看日志
 docker-compose logs -f app
 ```
 
@@ -130,7 +152,13 @@ docker-compose logs -f app
 
 ### 5. 访问应用
 
-打开浏览器访问：http://localhost:3000
+**仅 Supabase 模式**：
+- 应用：http://localhost:3000
+
+**Supabase + MinIO 模式**：
+- 应用：http://localhost:3000
+- MinIO Console：http://localhost:9001
+  - 登录：minioadmin / minioadmin
 
 **首次访问**：
 1. 点击"注册"创建账号
@@ -180,33 +208,49 @@ npm run dev
 
 ---
 
-## 📦 Docker 部署模式
+## 📦 存储模式说明
 
-### 模式 A：仅 Supabase Storage（默认）
+Aeon 支持两种存储模式：
+
+### 模式对比
+
+| 特性 | Supabase Storage | MinIO (自托管) |
+|------|-----------------|---------------|
+| **适用场景** | 小项目、快速部署 | 大文件、生产环境 |
+| **配置** | 无需额外配置 | 需要 MinIO 容器 |
+| **月费** | 免费额度 / 付费 | 仅服务器成本 |
+| **文件大小** | 最大 50MB | 无限制 |
+| **内存需求** | ~500MB | ~1GB |
+| **数据掌控** | Supabase 托管 | 完全自控 |
+
+### 启动命令
 
 ```bash
-# .env 配置
-NEXT_PUBLIC_STORAGE_TYPE=supabase
-
-# 启动
+# Supabase Storage（默认）
 docker-compose up -d app
+
+# Supabase + MinIO（推荐生产）
+docker-compose --profile with-minio up -d
 ```
 
-### 模式 B：Supabase + MinIO（自托管存储）
+### 常用命令
 
 ```bash
-# .env 配置
-NEXT_PUBLIC_STORAGE_TYPE=hybrid  # 或 minio
+# 查看服务状态
+docker-compose ps
 
-# 启动（App + MinIO）
-docker-compose --profile with-minio up -d
+# 查看应用日志
+docker-compose logs -f app
 
-# 访问：
-# - 应用：http://localhost:3000
-# - MinIO Console：http://localhost:9001
+# 查看 MinIO 日志
+docker-compose logs -f minio
+
+# 停止服务
+docker-compose down
+
+# 完全清理（包括数据）
+docker-compose down -v
 ```
-
-详见：[DOCKER_QUICK_START.md](./DOCKER_QUICK_START.md)
 
 ---
 
@@ -243,23 +287,6 @@ npm run db:push
 3. **文件上传验证** - MIME 类型 + Magic Number + 文件名 sanitization
 4. **输入验证** - XSS 防护 + 防原型污染
 5. **安全响应头** - CSP、HSTS、X-Frame-Options
-
-### 安全审计
-
-上线前必须执行：
-
-```bash
-# 1. 依赖安全扫描
-npm audit
-
-# 2. 环境变量检查（确保 .env 不在 Git 中）
-git log --all --full-history -- .env.local
-
-# 3. 完整审计清单
-# 见 SECURITY_AUDIT_CHECKLIST.md
-```
-
-详见：[SECURITY.md](./SECURITY.md)
 
 ---
 
@@ -368,24 +395,3 @@ Aeon/
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
 
 ---
-
-## 🙏 致谢
-
-- [Next.js](https://nextjs.org/)
-- [Supabase](https://supabase.com/)
-- [shadcn/ui](https://ui.shadcn.com/)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [Drizzle ORM](https://orm.drizzle.team/)
-
----
-
-## 📞 联系方式
-
-- **Issues**: [GitHub Issues](https://github.com/your-username/aeon/issues)
-- **Email**: your-email@example.com
-
----
-
-**Built with ❤️ using Next.js 16 and Supabase**
-
-🎉 **一键部署，3 分钟启动！**
