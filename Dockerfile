@@ -3,8 +3,15 @@ FROM node:24-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat bash curl postgresql-client
 WORKDIR /app
+
+# Install system dependencies with retry mechanism
+RUN apk update && \
+    apk add --no-cache \
+    libc6-compat \
+    bash \
+    curl \
+    postgresql-client
 
 # Copy package files
 COPY package.json package-lock.json* ./
@@ -26,15 +33,18 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 
-# Install bash and curl for entrypoint script
-RUN apk add --no-cache bash curl
+# Install runtime dependencies with retry mechanism
+RUN apk update && \
+    apk add --no-cache \
+    bash \
+    curl
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Create a non-root user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
 # Copy necessary files
 COPY --from=builder /app/public ./public
@@ -46,10 +56,8 @@ COPY --from=builder /app/supabase ./supabase
 COPY --from=builder /app/scripts ./scripts
 
 # Make entrypoint script executable
-RUN chmod +x /app/scripts/entrypoint.sh
-
-# Set correct permissions
-RUN chown -R nextjs:nodejs /app
+RUN chmod +x /app/scripts/entrypoint.sh && \
+    chown -R nextjs:nodejs /app
 
 USER nextjs
 
