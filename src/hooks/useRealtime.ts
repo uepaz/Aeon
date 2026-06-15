@@ -1,12 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export function useRealtimeRecords(userId: string | undefined) {
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     if (!userId) return;
@@ -32,19 +30,14 @@ export function useRealtimeRecords(userId: string | undefined) {
       )
       .subscribe();
 
-    setChannel(recordsChannel);
-
     return () => {
       recordsChannel.unsubscribe();
     };
   }, [userId, supabase]);
-
-  return channel;
 }
 
 export function useRealtimePhotos(userId: string | undefined) {
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     if (!userId) return;
@@ -70,12 +63,8 @@ export function useRealtimePhotos(userId: string | undefined) {
       )
       .subscribe();
 
-    setChannel(photosChannel);
-
     return () => {
       photosChannel.unsubscribe();
     };
   }, [userId, supabase]);
-
-  return channel;
 }

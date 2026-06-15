@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,8 +38,8 @@ export default function LoginPage() {
 
       router.push('/');
       router.refresh();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '登录失败');
     } finally {
       setLoading(false);
     }
@@ -46,12 +47,12 @@ export default function LoginPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen p-4 relative">
-      <a
+      <Link
         href="/"
         className="absolute top-6 left-6 text-sm text-muted-foreground hover:text-primary transition-colors"
       >
         ← 返回首页
-      </a>
+      </Link>
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>登录 Aeon</CardTitle>
@@ -87,9 +88,9 @@ export default function LoginPage() {
             </Button>
             <p className="text-sm text-center text-muted-foreground">
               还没有账号？{' '}
-              <a href="/register" className="text-primary hover:underline">
+              <Link href="/register" className="text-primary hover:underline">
                 注册
-              </a>
+              </Link>
             </p>
           </form>
         </CardContent>

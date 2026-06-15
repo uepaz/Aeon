@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { Heart, Cake } from 'lucide-react';
+import { Heart } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { BirthdayCard } from '@/components/dashboard/BirthdayCard';

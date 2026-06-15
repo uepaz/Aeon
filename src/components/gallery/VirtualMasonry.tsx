@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import Masonry from 'react-masonry-css';
 
-interface VirtualMasonryProps<T> {
+interface VirtualMasonryProps<T extends { id?: string | number }> {
   items: T[];
   renderItem: (item: T, index: number) => React.ReactNode;
   columnCount?: number;
@@ -11,7 +11,7 @@ interface VirtualMasonryProps<T> {
   onLoadMore?: () => void;
 }
 
-export function VirtualMasonry<T>({
+export function VirtualMasonry<T extends { id?: string | number }>({
   items,
   renderItem,
   columnCount = 4,
@@ -54,7 +54,7 @@ export function VirtualMasonry<T>({
         columnClassName="pl-4 bg-clip-padding"
       >
         {items.map((item, index) => (
-          <div key={(item as any).id || index} className="mb-4">
+          <div key={item.id ?? index} className="mb-4">
             {renderItem(item, index)}
           </div>
         ))}

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -49,8 +50,8 @@ export default function RegisterPage() {
         alert('注册成功！请检查您的邮箱确认账号后再登录。');
         router.push('/login');
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '注册失败');
     } finally {
       setLoading(false);
     }
@@ -58,12 +59,12 @@ export default function RegisterPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen p-4 relative">
-      <a
+      <Link
         href="/"
         className="absolute top-6 left-6 text-sm text-muted-foreground hover:text-primary transition-colors"
       >
         ← 返回首页
-      </a>
+      </Link>
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>注册 Aeon</CardTitle>
@@ -100,9 +101,9 @@ export default function RegisterPage() {
             </Button>
             <p className="text-sm text-center text-muted-foreground">
               已有账号？{' '}
-              <a href="/login" className="text-primary hover:underline">
+              <Link href="/login" className="text-primary hover:underline">
                 登录
-              </a>
+              </Link>
             </p>
           </form>
         </CardContent>

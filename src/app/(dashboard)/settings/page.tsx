@@ -246,7 +246,7 @@ export default function SettingsPage() {
                   onChange={(e) => setWelcomeMessage(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  留空则显示默认的"欢迎回来"
+                  留空则显示默认的“欢迎回来”
                 </p>
               </div>
 

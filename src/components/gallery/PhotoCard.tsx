@@ -31,7 +31,7 @@ export function PhotoCard({ photo, record, onClick }: PhotoCardProps) {
     try {
       const filename = `aeon-photo-${photo.id}.jpg`;
       await downloadOriginalPhoto(photo.originalUrl, filename);
-    } catch (error) {
+    } catch {
       alert('下载失败，请重试');
     } finally {
       setDownloading(false);

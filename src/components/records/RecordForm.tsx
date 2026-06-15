@@ -19,6 +19,7 @@ import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { compressImagesInParallel, validateImageFile } from '@/lib/utils/image';
+import { buildImageFileName, withImageFileName } from '@/lib/utils/image-files';
 import {
   createRecord,
   updateRecord,
@@ -41,7 +42,7 @@ export function RecordForm({ defaultValues, mode }: RecordFormProps) {
     handleSubmit,
     control,
     formState: { errors },
-  } = useForm<RecordFormData>({
+  } = useForm({
     resolver: zodResolver(recordSchema),
     defaultValues: {
       title: defaultValues?.title || '',
@@ -71,6 +72,19 @@ export function RecordForm({ defaultValues, mode }: RecordFormProps) {
     setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const updateExistingRecord = (recordId: string | undefined, data: RecordFormData) => {
+    if (!recordId) {
+      throw new Error('Missing record id');
+    }
+
+    return updateRecord(recordId, {
+      title: data.title,
+      content: data.content,
+      recordDate: data.recordDate.toISOString().split('T')[0],
+      tags: data.tags,
+    });
+  };
+
   const onSubmit = async (data: RecordFormData) => {
     setUploading(true);
     try {
@@ -83,22 +97,25 @@ export function RecordForm({ defaultValues, mode }: RecordFormProps) {
               recordDate: data.recordDate.toISOString().split('T')[0],
               tags: data.tags,
             })
-          : await updateRecord(defaultValues?.id!, {
-              title: data.title,
-              content: data.content,
-              recordDate: data.recordDate.toISOString().split('T')[0],
-              tags: data.tags,
-            });
+          : await updateExistingRecord(defaultValues?.id, data);
 
       // 上传照片（同时上传原图和压缩图）
       if (uploadedFiles.length > 0 && record) {
         for (const file of uploadedFiles) {
           // 并行生成两个版本：原图（高质量）和压缩图（显示用）
           const { originalFile, compressedFile } = await compressImagesInParallel(file);
+          const originalUploadFile = withImageFileName(
+            originalFile,
+            buildImageFileName(file.name, 'original', originalFile.type)
+          );
+          const compressedUploadFile = withImageFileName(
+            compressedFile,
+            buildImageFileName(file.name, 'compressed', compressedFile.type)
+          );
 
           const formData = new FormData();
-          formData.append('originalFile', originalFile);
-          formData.append('compressedFile', compressedFile);
+          formData.append('originalFile', originalUploadFile, originalUploadFile.name);
+          formData.append('compressedFile', compressedUploadFile, compressedUploadFile.name);
 
           const result = await uploadPhoto(record.id, formData);
           if (!result.success) {

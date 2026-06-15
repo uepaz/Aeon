@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import type { StorageProvider, UploadResult, DeleteResult } from './types';
+import { getImageFileExtension } from '@/lib/utils/image-files';
 
 export class SupabaseStorageProvider implements StorageProvider {
   private bucket = 'record-photos';
@@ -16,9 +17,11 @@ export class SupabaseStorageProvider implements StorageProvider {
       const timestamp = Date.now();
       const randomStr = Math.random().toString(36).substring(7);
       const baseFileName = `${timestamp}-${randomStr}`;
+      const originalExtension = getImageFileExtension(originalFile.type);
+      const compressedExtension = getImageFileExtension(compressedFile.type);
 
-      const originalPath = `${userId}/${recordId}/original_${baseFileName}.webp`;
-      const compressedPath = `${userId}/${recordId}/compressed_${baseFileName}.webp`;
+      const originalPath = `${userId}/${recordId}/original_${baseFileName}${originalExtension}`;
+      const compressedPath = `${userId}/${recordId}/compressed_${baseFileName}${compressedExtension}`;
 
       // 上传原图
       const { error: originalError } = await supabase.storage

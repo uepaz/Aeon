@@ -1,31 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { StatsOverview } from '@/components/admin/StatsOverview';
 import { getAdminData } from '@/app/(dashboard)/settings/actions';
 import { Loader2 } from 'lucide-react';
 
 export function AdminPanel() {
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<any>(null);
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-data'],
+    queryFn: () => getAdminData(),
+  });
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const result = await getAdminData();
-      setData(result);
-    } catch (error) {
-      console.error('Failed to load admin data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

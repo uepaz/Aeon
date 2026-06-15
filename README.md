@@ -18,7 +18,7 @@
 - 🖼️ **照片画廊** - 瀑布流布局、虚拟滚动优化
 - 🔒 **企业级安全** - RLS、多层文件验证、XSS 防护
 - 🎨 **现代化 UI** - shadcn/ui + Tailwind CSS v4
-- 🚀 **一键部署** - Docker + 自动数据库迁移
+- 🚀 **一键部署** - Docker + Supabase 迁移脚本
 
 ## 📋 前置要求
 
@@ -61,10 +61,8 @@ nano .env  # 或 .env.local
 1. 进入 **Settings → API**，获取：
    - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
    - `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY`
-
-2. 进入 **Settings → Database**，获取：
-   - `Connection string` (Transaction mode) → `DATABASE_URL`
+2. 进入 **Project Settings → Database**，获取：
+   - Session Pooler connection string → `DATABASE_URL`
 
 **必填配置**：
 
@@ -72,10 +70,9 @@ nano .env  # 或 .env.local
 # Supabase 配置
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
 
-# 数据库
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project.supabase.co:5432/postgres
+# 仅服务端使用：Docker db-migrate 会用它连接 Postgres 并执行 SQL
+DATABASE_URL=postgresql://postgres.your-project-ref:your_database_password@aws-0-your-region.pooler.supabase.com:5432/postgres?sslmode=require
 
 # 应用
 NEXT_PUBLIC_APP_URL=http://localhost:3000
@@ -84,7 +81,13 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_STORAGE_TYPE=supabase
 ```
 
-### 4. 一键启动 🎉
+> 注意：`DATABASE_URL` 不能加 `NEXT_PUBLIC_` 前缀，也不要提交到 GitHub。Docker 环境优先使用 Supabase 的 **Session Pooler** 连接串；`db.<project-ref>.supabase.co:5432` 直连地址在部分 IPv4-only 环境里无法解析或连接。
+
+### 4. 数据库迁移
+
+Docker 部署会先启动 `db-migrate` 服务，它使用 `DATABASE_URL` 通过 `psql` 依次执行 `supabase/migrations/*.sql`，成功后才启动应用容器。迁移记录保存在 `public._aeon_migrations`，重复启动会自动跳过已执行文件。
+
+### 5. 一键启动
 
 **方式 A：仅 Supabase Storage（默认，推荐小项目）**
 
@@ -92,10 +95,11 @@ NEXT_PUBLIC_STORAGE_TYPE=supabase
 # .env 配置
 NEXT_PUBLIC_STORAGE_TYPE=supabase
 
-# 启动应用（自动执行数据库迁移）
+# 启动应用（先执行数据库迁移）
 docker-compose up -d app
 
-# 查看启动日志
+# 查看迁移和应用日志
+docker-compose logs -f db-migrate
 docker-compose logs -f app
 ```
 
@@ -106,30 +110,34 @@ docker-compose logs -f app
 NEXT_PUBLIC_STORAGE_TYPE=hybrid  # 或 minio
 
 # MinIO 配置（使用默认值或自定义）
+NEXT_PUBLIC_MINIO_ENDPOINT=minio
+NEXT_PUBLIC_MINIO_PUBLIC_ENDPOINT=localhost
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=minioadmin  # ⚠️ 生产环境必须修改
 
 # 启动应用 + MinIO
 docker-compose --profile with-minio up -d
 
-# 查看日志
+# 查看迁移和应用日志
+docker-compose logs -f db-migrate
 docker-compose logs -f app
 ```
 
 **启动过程**（自动完成）：
 ```
-🚀 Aeon 启动脚本
-⏳ 等待数据库连接...
-✅ 数据库连接成功
-🔧 执行数据库迁移...
-  ✅ 启用 RLS
-  ✅ 创建安全策略
-  ✅ 创建 Storage 策略
-✅ 数据库迁移完成
-🎉 启动 Next.js 应用...
+db-migrate:
+Waiting for Supabase Postgres...
+Preparing migration history table...
+Applying migration 000_schema.sql
+Applying migration 001_enable_rls.sql
+Applying migration 002_storage_policies.sql
+Database migrations finished.
+
+app:
+Starting Aeon app...
 ```
 
-### 5. 访问应用
+### 6. 访问应用
 
 **仅 Supabase 模式**：
 - 应用：http://localhost:3000
@@ -167,8 +175,9 @@ nano .env.local
 ### 3. 手动执行数据库迁移
 
 在 Supabase Dashboard → SQL Editor 中依次执行：
-1. `supabase/migrations/001_enable_rls.sql`
-2. `supabase/migrations/002_storage_policies.sql`
+1. `supabase/migrations/000_schema.sql`
+2. `supabase/migrations/001_enable_rls.sql`
+3. `supabase/migrations/002_storage_policies.sql`
 
 ### 4. 创建 Storage 桶
 
@@ -234,27 +243,17 @@ docker-compose down -v
 
 ---
 
-## 🗄️ 数据库 Schema
+## 🗄️ 数据库
 
-项目使用 Drizzle ORM 定义 schema，包含 3 张主表：
+项目使用 Supabase Postgres，初始化 SQL 统一放在 `supabase/migrations/`。核心数据表：
 
 - **user_settings** - 用户设置（纪念日、生日、名字等）
 - **records** - 记录表（标题、内容、日期、标签）
 - **photos** - 照片表（原图路径、压缩图路径、大小）
 
-### Schema 更新
+Docker 部署时，`db-migrate` 会自动按文件名顺序执行迁移。非 Docker 开发时，可以在 Supabase SQL Editor 中按顺序手动执行这些 SQL 文件。
 
-如果需要修改数据库结构：
-
-```bash
-# 1. 修改 src/lib/db/schema.ts
-
-# 2. 生成新迁移
-npm run db:generate
-
-# 3. 推送到数据库
-npm run db:push
-```
+如果需要修改数据库结构，新增一份按序号递增的 SQL 文件到 `supabase/migrations/`。下一次 Docker 启动会自动应用未执行过的迁移。
 
 ---
 
@@ -279,17 +278,12 @@ npm run build        # 生产构建
 npm run start        # 启动生产服务器
 npm run lint         # ESLint 检查
 
-# 数据库
-npm run db:generate  # 生成 migration
-npm run db:push      # 推送 schema 到数据库
-npm run db:pull      # 从数据库拉取 schema
-npm run db:studio    # 打开 Drizzle Studio
-
 # Docker
-docker-compose up -d              # 启动应用
-docker-compose --profile with-minio up -d  # 启动应用 + MinIO
-docker-compose logs -f app        # 查看日志
-docker-compose down               # 停止服务
+docker-compose up -d app                    # 启动应用，并先执行数据库迁移
+docker-compose --profile with-minio up -d   # 启动应用 + MinIO，并先执行数据库迁移
+docker-compose logs -f db-migrate           # 查看迁移日志
+docker-compose logs -f app                  # 查看应用日志
+docker-compose down                         # 停止服务
 ```
 
 ---
@@ -322,28 +316,21 @@ Aeon/
 │   ├── lib/                    # 核心库
 │   │   ├── config/             # 配置文件
 │   │   ├── db/                 # 数据库
-│   │   │   ├── queries/        # 查询函数
-│   │   │   ├── client.ts       # 数据库客户端
-│   │   │   └── schema.ts       # Schema 定义
+│   │   │   └── queries/        # Supabase 查询函数
 │   │   ├── storage/            # 存储抽象层
 │   │   ├── supabase/           # Supabase 客户端
 │   │   ├── utils/              # 工具函数
-│   │   ├── validations/        # 验证 schemas
-│   │   └── env.ts              # 环境变量验证
+│   │   └── validations/        # 验证 schemas
 │   ├── hooks/                  # 自定义 hooks
-│   ├── types/                  # TypeScript 类型
-│   └── middleware.ts           # Next.js 中间件
+│   └── proxy.ts                # Next.js Proxy 认证入口
 ├── supabase/
 │   └── migrations/             # 数据库迁移文件
 ├── scripts/                    # 自动化脚本
-│   ├── apply-migrations.js     # 自动迁移脚本
-│   └── entrypoint.sh           # Docker 启动脚本
-├── public/                     # 静态资源
-├── docs/                       # 项目文档
+│   ├── run-migrations.sh       # Docker 数据库迁移脚本
+│   └── entrypoint.sh           # Docker 应用启动脚本
 ├── docker-compose.yml          # Docker Compose 配置
 ├── Dockerfile                  # Docker 构建文件
 ├── .env.example                # 环境变量模板
-├── SECURITY.md                 # 安全指南
 └── README.md                   # 本文件
 ```
 

@@ -17,9 +17,11 @@ export interface ExportRecord {
   }>;
 }
 
+export type ExportUserSettings = Record<string, unknown> | null;
+
 export async function exportDataToZip(
   records: ExportRecord[],
-  userSettings: any
+  userSettings: ExportUserSettings
 ) {
   const zip = new JSZip();
 

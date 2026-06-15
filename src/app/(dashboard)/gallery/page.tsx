@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PhotoCard } from '@/components/gallery/PhotoCard';
 import { PhotoViewer } from '@/components/gallery/PhotoViewer';
 import { GalleryFilters } from '@/components/gallery/GalleryFilters';
@@ -9,16 +9,17 @@ import { useGalleryPhotos, usePrefetchNextPage, useInvalidateGallery } from '@/h
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { useEffect } from 'react';
+
+interface GalleryFiltersState {
+  startDate?: string;
+  endDate?: string;
+}
 
 export default function GalleryPage() {
   const [offset, setOffset] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
-  const [filters, setFilters] = useState<{
-    startDate?: string;
-    endDate?: string;
-  }>({});
+  const [filters, setFilters] = useState<GalleryFiltersState>({});
 
   // 使用 React Query 获取照片
   const { data: photos = [], isLoading, error } = useGalleryPhotos({
@@ -52,10 +53,10 @@ export default function GalleryPage() {
     }
   }, [photos.length, prefetchNextPage]);
 
-  // 筛选变化时重置
-  useEffect(() => {
+  const handleFilterChange = (nextFilters: GalleryFiltersState) => {
+    setFilters(nextFilters);
     setOffset(0);
-  }, [filters.startDate, filters.endDate]);
+  };
 
   const handleLoadMore = () => {
     setOffset((prev) => prev + 50);
@@ -93,7 +94,7 @@ export default function GalleryPage() {
           <p className="text-muted-foreground">浏览所有照片</p>
         </div>
 
-        <GalleryFilters onFilterChange={setFilters} />
+        <GalleryFilters onFilterChange={handleFilterChange} />
 
         <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed rounded-lg">
           <p className="text-muted-foreground mb-4">还没有照片</p>
@@ -112,22 +113,16 @@ export default function GalleryPage() {
         <p className="text-muted-foreground">共 {photos.length} 张照片</p>
       </div>
 
-      <GalleryFilters onFilterChange={setFilters} />
+      <GalleryFilters onFilterChange={handleFilterChange} />
 
       <VirtualMasonry
         items={photos}
         renderItem={(photo, index) => (
-          <div
-            className="cursor-pointer hover:opacity-90 transition-opacity"
+          <PhotoCard
+            photo={photo}
+            record={photo.record}
             onClick={() => handlePhotoClick(index)}
-          >
-            <img
-              src={photo.url}
-              alt={photo.title || '照片'}
-              className="w-full h-auto rounded-lg"
-              loading="lazy"
-            />
-          </div>
+          />
         )}
       />
 
@@ -149,9 +144,8 @@ export default function GalleryPage() {
       <PhotoViewer
         photos={photos}
         currentIndex={currentPhotoIndex}
-        open={viewerOpen}
-        onOpenChange={setViewerOpen}
-        onIndexChange={setCurrentPhotoIndex}
+        isOpen={viewerOpen}
+        onClose={() => setViewerOpen(false)}
       />
     </div>
   );

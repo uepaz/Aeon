@@ -3,8 +3,8 @@
  * 提供缓存和自动重新请求功能
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchGalleryPhotos, type FetchGalleryFilters, type GalleryPhoto } from '@/app/(dashboard)/gallery/actions';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchGalleryPhotos, type FetchGalleryFilters } from '@/app/(dashboard)/gallery/actions';
 
 /**
  * 获取画廊照片列表

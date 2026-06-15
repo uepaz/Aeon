@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowLeft, Calendar, Edit, Trash2 } from 'lucide-react';
+import { ArrowLeft, Calendar, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { DeleteRecordButton } from '@/components/records/DeleteRecordButton';

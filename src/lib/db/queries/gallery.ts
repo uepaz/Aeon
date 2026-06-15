@@ -9,6 +9,12 @@ export interface GalleryFilters {
   sortBy?: 'uploaded_at' | 'record_date';
 }
 
+interface EmbeddedRecord {
+  id: string;
+  title: string | null;
+  record_date: string;
+}
+
 export async function getGalleryPhotos(filters: GalleryFilters) {
   const {
     userId,
@@ -53,7 +59,7 @@ export async function getGalleryPhotos(filters: GalleryFilters) {
   // 优先按照记录日期（照片的时间信息）排序，其次按上传时间
   if (sortBy === 'record_date') {
     const { data, error } = await query
-      .order('records.record_date', { ascending: false })
+      .order('record_date', { referencedTable: 'records', ascending: false })
       .order('uploaded_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -61,17 +67,7 @@ export async function getGalleryPhotos(filters: GalleryFilters) {
       throw new Error(`Failed to fetch gallery photos: ${error.message}`);
     }
 
-    // 将 records 数组转换为单个对象
-    return (data || []).map((photo) => ({
-      id: photo.id,
-      storage_path: photo.storage_path,
-      compressed_path: photo.compressed_path,
-      caption: photo.caption,
-      uploaded_at: photo.uploaded_at,
-      record: Array.isArray(photo.records) && photo.records.length > 0
-        ? photo.records[0]
-        : null,
-    }));
+    return normalizeGalleryPhotos(data || []);
   } else {
     // 按上传时间排序
     const { data, error } = await query
@@ -82,16 +78,36 @@ export async function getGalleryPhotos(filters: GalleryFilters) {
       throw new Error(`Failed to fetch gallery photos: ${error.message}`);
     }
 
-    // 将 records 数组转换为单个对象
-    return (data || []).map((photo) => ({
-      id: photo.id,
-      storage_path: photo.storage_path,
-      compressed_path: photo.compressed_path,
-      caption: photo.caption,
-      uploaded_at: photo.uploaded_at,
-      record: Array.isArray(photo.records) && photo.records.length > 0
-        ? photo.records[0]
-        : null,
-    }));
+    return normalizeGalleryPhotos(data || []);
   }
+}
+
+function normalizeGalleryPhotos(
+  photos: Array<{
+    id: string;
+    storage_path: string;
+    compressed_path: string | null;
+    caption: string | null;
+    uploaded_at: string;
+    records: EmbeddedRecord | EmbeddedRecord[] | null;
+  }>
+) {
+  return photos.map((photo) => ({
+    id: photo.id,
+    storage_path: photo.storage_path,
+    compressed_path: photo.compressed_path,
+    caption: photo.caption,
+    uploaded_at: photo.uploaded_at,
+    record: normalizeEmbeddedRecord(photo.records),
+  }));
+}
+
+function normalizeEmbeddedRecord(
+  record: EmbeddedRecord | EmbeddedRecord[] | null
+): EmbeddedRecord | null {
+  if (Array.isArray(record)) {
+    return record[0] || null;
+  }
+
+  return record;
 }

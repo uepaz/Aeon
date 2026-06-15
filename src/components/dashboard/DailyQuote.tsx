@@ -19,51 +19,68 @@ export function DailyQuote({ customApiUrl }: DailyQuoteProps) {
   const [currentQuote, setCurrentQuote] = useState('加载中...');
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  // 从网络接口获取语录
-  const fetchQuote = async () => {
-    try {
-      // 使用自定义 API 或默认的一言 API
-      const apiUrl = customApiUrl || 'https://v1.hitokoto.cn/?c=d&c=i&c=k';
-
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        cache: 'no-store',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch quote');
-      }
-
-      const data = await response.json();
-      return data.hitokoto || fallbackQuotes[0];
-    } catch (error) {
-      console.error('Failed to fetch quote:', error);
-      // 失败时返回随机备用语录
-      return fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)];
-    }
-  };
-
-  // 切换语录
-  const changeQuote = async () => {
-    setIsTransitioning(true);
-
-    // 等待淡出动画完成后切换文字
-    setTimeout(async () => {
-      const newQuote = await fetchQuote();
-      setCurrentQuote(newQuote);
-      setIsTransitioning(false);
-    }, 300);
-  };
-
   // 初始加载和定时切换
   useEffect(() => {
+    let cancelled = false;
+    let transitionTimeout: ReturnType<typeof setTimeout> | undefined;
+
+    // 从网络接口获取语录
+    const fetchQuote = async () => {
+      try {
+        // 使用自定义 API 或默认的一言 API
+        const apiUrl = customApiUrl || 'https://v1.hitokoto.cn/?c=d&c=i&c=k';
+
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          cache: 'no-store',
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch quote');
+        }
+
+        const data = await response.json();
+        return data.hitokoto || fallbackQuotes[0];
+      } catch (error) {
+        console.error('Failed to fetch quote:', error);
+        // 失败时返回随机备用语录
+        return fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)];
+      }
+    };
+
+    const loadQuote = async () => {
+      const quote = await fetchQuote();
+      if (!cancelled) {
+        setCurrentQuote(quote);
+      }
+    };
+
+    // 切换语录
+    const changeQuote = () => {
+      setIsTransitioning(true);
+
+      // 等待淡出动画完成后切换文字
+      transitionTimeout = setTimeout(async () => {
+        await loadQuote();
+        if (!cancelled) {
+          setIsTransitioning(false);
+        }
+      }, 300);
+    };
+
     // 立即加载第一条
-    fetchQuote().then((quote) => setCurrentQuote(quote));
+    void loadQuote();
 
     // 每20秒切换一次语录
     const interval = setInterval(changeQuote, 20000);
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      if (transitionTimeout) {
+        clearTimeout(transitionTimeout);
+      }
+    };
   }, [customApiUrl]);
 
   return (

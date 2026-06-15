@@ -31,7 +31,7 @@ export function RecordCard({ record }: RecordCardProps) {
     <Link href={`/records/${record.id}`} className="block">
       <Card className="hover:bg-accent transition-colors">
         <CardContent className="p-4 space-y-3">
-          {/* 日期 - 使用相对时间与 RecentRecords 保持一致 */}
+          {/* 日期 */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Calendar className="w-4 h-4" />
             {isValidDate ? (

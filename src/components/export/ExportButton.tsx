@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { Download, Loader2 } from 'lucide-react';
-import { getExportData } from '@/app/(dashboard)/actions';
+import { getExportData } from '@/app/(dashboard)/settings/actions';
 import { exportDataToZip } from '@/lib/utils/export';
 import {
   AlertDialog,

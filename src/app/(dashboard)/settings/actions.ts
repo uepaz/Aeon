@@ -2,6 +2,38 @@
 
 import { createClient } from '@/lib/supabase/server';
 
+interface ExportPhoto {
+  id: string;
+  storage_path: string;
+  compressed_path: string | null;
+  caption: string | null;
+}
+
+interface ExportRecord {
+  id: string;
+  title: string | null;
+  content: string;
+  record_date: string;
+  tags: string[] | null;
+  created_at: string;
+  photos: ExportPhoto[] | null;
+}
+
+interface ImportPhoto {
+  id: string;
+  filename?: string;
+  caption?: string | null;
+}
+
+interface ImportRecord {
+  id: string;
+  title?: string | null;
+  content: string;
+  recordDate: string;
+  tags?: string[];
+  photos: ImportPhoto[];
+}
+
 export async function getAdminData() {
   const supabase = await createClient();
   const {
@@ -45,4 +77,165 @@ export async function getAdminData() {
       totalBytes, // 返回原始字节数，便于调试
     },
   };
+}
+
+export async function getExportData() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error('Unauthorized');
+  }
+
+  const { data: allRecords, error: recordsError } = await supabase
+    .from('records')
+    .select(
+      `
+      id,
+      title,
+      content,
+      record_date,
+      tags,
+      created_at,
+      photos(
+        id,
+        storage_path,
+        compressed_path,
+        caption
+      )
+    `
+    )
+    .eq('user_id', user.id)
+    .order('record_date', { ascending: false });
+
+  if (recordsError) {
+    throw new Error(`Failed to fetch records: ${recordsError.message}`);
+  }
+
+  const { data: settings } = await supabase
+    .from('user_settings')
+    .select('*')
+    .eq('user_id', user.id)
+    .single();
+
+  const exportRecords = (allRecords || []) as ExportRecord[];
+
+  const allPaths = exportRecords.flatMap((record) =>
+    (Array.isArray(record.photos) ? record.photos : []).map(
+      (photo) => photo.storage_path
+    )
+  );
+
+  const { data: signedUrls } = await supabase.storage
+    .from('record-photos')
+    .createSignedUrls(allPaths, 86400);
+
+  const urlMap = new Map(
+    signedUrls?.map((item, index) => [allPaths[index], item.signedUrl]) || []
+  );
+
+  const recordsWithUrls = exportRecords.map((record) => ({
+    ...record,
+    photos: (Array.isArray(record.photos) ? record.photos : []).map(
+      (photo) => ({
+        ...photo,
+        originalUrl: urlMap.get(photo.storage_path) || '',
+      })
+    ),
+  }));
+
+  return {
+    records: recordsWithUrls,
+    settings,
+  };
+}
+
+export async function importData(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error('Unauthorized');
+  }
+
+  const records = JSON.parse(formData.get('records') as string) as ImportRecord[];
+  const photoEntries = JSON.parse(formData.get('photoEntries') as string) as Record<string, string>;
+
+  const results = {
+    recordsImported: 0,
+    photosImported: 0,
+    errors: [] as string[],
+  };
+
+  for (const record of records) {
+    try {
+      const { data: newRecord, error: recordError } = await supabase
+        .from('records')
+        .insert({
+          user_id: user.id,
+          title: record.title,
+          content: record.content,
+          record_date: record.recordDate,
+          tags: record.tags,
+        })
+        .select()
+        .single();
+
+      if (recordError) {
+        results.errors.push(`记录导入失败: ${record.title || record.id}`);
+        continue;
+      }
+
+      results.recordsImported++;
+
+      for (let index = 0; index < record.photos.length; index++) {
+        const photo = record.photos[index];
+        const photoKey = `photos_${record.id}_${photo.id}`;
+        const photoBlob = photoEntries[photoKey];
+
+        if (!photoBlob) {
+          results.errors.push(`照片文件缺失: ${photo.filename}`);
+          continue;
+        }
+
+        try {
+          const fileName = `${user.id}/${newRecord.id}/${Date.now()}_${index}.jpg`;
+          const { error: uploadError } = await supabase.storage
+            .from('record-photos')
+            .upload(fileName, photoBlob, {
+              contentType: 'image/jpeg',
+            });
+
+          if (uploadError) {
+            results.errors.push(`照片上传失败: ${photo.filename}`);
+            continue;
+          }
+
+          const { error: photoError } = await supabase.from('photos').insert({
+            user_id: user.id,
+            record_id: newRecord.id,
+            storage_path: fileName,
+            caption: photo.caption,
+          });
+
+          if (photoError) {
+            results.errors.push(`照片记录插入失败: ${photo.filename}`);
+            continue;
+          }
+
+          results.photosImported++;
+        } catch {
+          results.errors.push(`照片处理失败: ${photo.filename}`);
+        }
+      }
+    } catch {
+      results.errors.push(`记录处理失败: ${record.title || record.id}`);
+    }
+  }
+
+  return results;
 }

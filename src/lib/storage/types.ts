@@ -12,11 +12,14 @@ export interface StorageConfig {
   };
   minio?: {
     endpoint: string;
+    publicEndpoint?: string;
     accessKey: string;
     secretKey: string;
     bucket: string;
     port?: number;
+    publicPort?: number;
     useSSL?: boolean;
+    publicUseSSL?: boolean;
   };
 }
 

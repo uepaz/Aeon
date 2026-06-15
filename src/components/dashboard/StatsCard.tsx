@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Image, Calendar } from 'lucide-react';
+import { Calendar, FileText, ImageIcon } from 'lucide-react';
 
 interface StatsCardProps {
   totalRecords: number;
@@ -41,7 +41,7 @@ export function StatsCard({
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Image className="h-4 w-4 text-muted-foreground" />
+            <ImageIcon className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm text-muted-foreground">照片数</span>
           </div>
           <span className="text-2xl font-bold">{totalPhotos}</span>

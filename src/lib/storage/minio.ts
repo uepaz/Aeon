@@ -1,36 +1,53 @@
 import { S3Client, PutObjectCommand, DeleteObjectsCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { StorageProvider, UploadResult, DeleteResult } from './types';
+import { getImageContentType, getImageFileExtension } from '@/lib/utils/image-files';
 
 export class MinioStorageProvider implements StorageProvider {
   private client: S3Client;
+  private signingClient: S3Client;
   private bucket: string;
-  private endpoint: string;
 
   constructor(config: {
     endpoint: string;
+    publicEndpoint?: string;
     accessKey: string;
     secretKey: string;
     bucket: string;
     port?: number;
+    publicPort?: number;
     useSSL?: boolean;
+    publicUseSSL?: boolean;
   }) {
     this.bucket = config.bucket;
-    this.endpoint = config.endpoint;
 
-    // 构建完整的 endpoint URL
-    const protocol = config.useSSL ? 'https' : 'http';
-    const port = config.port ? `:${config.port}` : '';
-    const fullEndpoint = `${protocol}://${config.endpoint}${port}`;
+    const internalEndpoint = buildEndpointUrl(
+      config.endpoint,
+      config.port,
+      config.useSSL
+    );
+    const publicEndpoint = buildEndpointUrl(
+      config.publicEndpoint || config.endpoint,
+      config.publicPort ?? config.port,
+      config.publicUseSSL ?? config.useSSL
+    );
 
-    this.client = new S3Client({
+    const clientConfig = {
       region: 'us-east-1', // MinIO 忽略 region，但必须提供
-      endpoint: fullEndpoint,
       credentials: {
         accessKeyId: config.accessKey,
         secretAccessKey: config.secretKey,
       },
       forcePathStyle: true, // MinIO 需要 path-style
+    };
+
+    this.client = new S3Client({
+      ...clientConfig,
+      endpoint: internalEndpoint,
+    });
+    this.signingClient = new S3Client({
+      ...clientConfig,
+      endpoint: publicEndpoint,
     });
   }
 
@@ -44,9 +61,11 @@ export class MinioStorageProvider implements StorageProvider {
       const timestamp = Date.now();
       const randomStr = Math.random().toString(36).substring(7);
       const baseFileName = `${timestamp}-${randomStr}`;
+      const originalExtension = getImageFileExtension(originalFile.type);
+      const compressedExtension = getImageFileExtension(compressedFile.type);
 
-      const originalPath = `${userId}/${recordId}/original_${baseFileName}.webp`;
-      const compressedPath = `${userId}/${recordId}/compressed_${baseFileName}.webp`;
+      const originalPath = `${userId}/${recordId}/original_${baseFileName}${originalExtension}`;
+      const compressedPath = `${userId}/${recordId}/compressed_${baseFileName}${compressedExtension}`;
 
       // 上传原图
       const originalBuffer = Buffer.from(await originalFile.arrayBuffer());
@@ -55,7 +74,7 @@ export class MinioStorageProvider implements StorageProvider {
           Bucket: this.bucket,
           Key: originalPath,
           Body: originalBuffer,
-          ContentType: 'image/webp',
+          ContentType: getImageContentType(originalFile),
         })
       );
 
@@ -66,21 +85,14 @@ export class MinioStorageProvider implements StorageProvider {
           Bucket: this.bucket,
           Key: compressedPath,
           Body: compressedBuffer,
-          ContentType: 'image/webp',
+          ContentType: getImageContentType(compressedFile),
         })
       );
-
-      // 生成访问 URL（MinIO 直接访问）
-      const protocol = this.endpoint.startsWith('https') ? 'https' : 'http';
-      const originalUrl = `${protocol}://${this.endpoint}/${this.bucket}/${originalPath}`;
-      const compressedUrl = `${protocol}://${this.endpoint}/${this.bucket}/${compressedPath}`;
 
       return {
         success: true,
         originalPath,
         compressedPath,
-        originalUrl,
-        compressedUrl,
       };
     } catch (error) {
       console.error('MinIO upload failed:', error);
@@ -123,7 +135,7 @@ export class MinioStorageProvider implements StorageProvider {
         Key: path,
       });
 
-      const signedUrl = await getSignedUrl(this.client, command, { expiresIn });
+      const signedUrl = await getSignedUrl(this.signingClient, command, { expiresIn });
       return signedUrl;
     } catch (error) {
       console.error('Failed to generate signed URL:', error);
@@ -148,4 +160,18 @@ export class MinioStorageProvider implements StorageProvider {
 
     return urlMap;
   }
+}
+
+function buildEndpointUrl(
+  endpoint: string,
+  port?: number,
+  useSSL?: boolean
+): string {
+  if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
+    return endpoint;
+  }
+
+  const protocol = useSSL ? 'https' : 'http';
+  const portPart = port ? `:${port}` : '';
+  return `${protocol}://${endpoint}${portPart}`;
 }

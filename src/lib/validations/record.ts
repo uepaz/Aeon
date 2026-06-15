@@ -28,9 +28,12 @@ const sanitizeString = (str: string): string => {
 };
 
 /**
- * 安全字符串 Schema（自动 sanitize）
+ * 安全字符串 Schema 构造器（先校验长度，再 sanitize）
+ * 注意：Zod 4 中 .transform() 返回 pipe，不能再链式调用 .max()，
+ * 所以使用函数在 transform 之前应用 max 约束。
  */
-const safeStringSchema = z.string().transform(sanitizeString);
+const safeString = (maxLength: number, maxMessage: string) =>
+  z.string().max(maxLength, maxMessage).transform(sanitizeString);
 
 // ============================================
 // 记录验证 Schema
@@ -38,23 +41,21 @@ const safeStringSchema = z.string().transform(sanitizeString);
 
 export const recordSchema = z.object({
   // 标题（可选）
-  title: safeStringSchema
-    .max(100, '标题最多 100 字')
+  title: safeString(100, '标题最多 100 字')
     .optional()
     .transform((val) => {
-      // 空字符串或纯空格转为 null
+      // 空字符串或纯空格转为 undefined
       if (!val || val.trim().length === 0) return undefined;
       return val;
     }),
 
   // 内容（必填）
-  content: safeStringSchema
+  content: z
+    .string()
     .min(1, '内容不能为空')
     .max(5000, '内容最多 5000 字')
-    .refine(
-      (val) => val.trim().length > 0,
-      '内容不能只包含空格'
-    ),
+    .transform(sanitizeString)
+    .refine((val) => val.trim().length > 0, '内容不能只包含空格'),
 
   // 记录日期
   recordDate: z
@@ -78,15 +79,7 @@ export const recordSchema = z.object({
         .transform(sanitizeString)
     )
     .max(10, '最多 10 个标签')
-    .optional()
-    .default([])
-    .transform((tags) => {
-      // 去重 + 过滤空标签
-      const uniqueTags = [...new Set(tags)].filter(
-        (tag) => tag.trim().length > 0
-      );
-      return uniqueTags;
-    }),
+    .optional(),
 });
 
 export type RecordFormData = z.infer<typeof recordSchema>;
@@ -128,15 +121,13 @@ export const userSettingsSchema = z
       .optional(),
 
     // 名字 1
-    name1: safeStringSchema.max(50, '名字最多 50 字').optional(),
+    name1: safeString(50, '名字最多 50 字').optional(),
 
     // 名字 2
-    name2: safeStringSchema.max(50, '名字最多 50 字').optional(),
+    name2: safeString(50, '名字最多 50 字').optional(),
 
     // 自定义欢迎语
-    welcomeMessage: safeStringSchema
-      .max(200, '欢迎语最多 200 字')
-      .optional(),
+    welcomeMessage: safeString(200, '欢迎语最多 200 字').optional(),
 
     // 自定义语录 API
     quoteApiUrl: z
@@ -164,7 +155,6 @@ export const timelineSearchSchema = z.object({
     .max(100, '搜索关键词最多 100 字')
     .transform(sanitizeString)
     .optional(),
-
   // 日期范围
   startDate: z
     .string()

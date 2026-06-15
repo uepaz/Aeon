@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { parseImportZip, validateImportData } from '@/lib/utils/import';
-import { importData } from '@/app/(dashboard)/actions';
+import { importData } from '@/app/(dashboard)/settings/actions';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,12 +23,24 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
+type ParsedImportData = Awaited<ReturnType<typeof parseImportZip>>;
+
+interface ImportResult {
+  recordsImported: number;
+  photosImported: number;
+  errors: string[];
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '未知错误';
+}
+
 export function ImportButton() {
   const [importing, setImporting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showResult, setShowResult] = useState(false);
-  const [parsedData, setParsedData] = useState<any>(null);
-  const [result, setResult] = useState<any>(null);
+  const [parsedData, setParsedData] = useState<ParsedImportData | null>(null);
+  const [result, setResult] = useState<ImportResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,8 +61,8 @@ export function ImportButton() {
 
       setParsedData(data);
       setShowConfirm(true);
-    } catch (error: any) {
-      alert(`解析失败：${error.message}`);
+    } catch (error: unknown) {
+      alert(`解析失败：${getErrorMessage(error)}`);
     } finally {
       setImporting(false);
       if (fileInputRef.current) {
@@ -60,6 +72,8 @@ export function ImportButton() {
   };
 
   const handleConfirmImport = async () => {
+    if (!parsedData) return;
+
     setShowConfirm(false);
     setImporting(true);
 
@@ -90,13 +104,15 @@ export function ImportButton() {
       const importResult = await importData(formData);
       setResult(importResult);
       setShowResult(true);
-    } catch (error: any) {
-      alert(`导入失败：${error.message}`);
+    } catch (error: unknown) {
+      alert(`导入失败：${getErrorMessage(error)}`);
     } finally {
       setImporting(false);
       setParsedData(null);
     }
   };
+
+  const resultErrors = result?.errors ?? [];
 
   return (
     <>
@@ -165,7 +181,7 @@ export function ImportButton() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {result?.errors.length === 0 ? (
+              {resultErrors.length === 0 ? (
                 <>
                   <CheckCircle className="h-5 w-5 text-green-600" />
                   导入成功
@@ -182,17 +198,17 @@ export function ImportButton() {
                 <p>✅ 成功导入记录：{result?.recordsImported || 0}</p>
                 <p>✅ 成功导入照片：{result?.photosImported || 0}</p>
 
-                {result?.errors.length > 0 && (
+                {resultErrors.length > 0 && (
                   <div className="mt-4">
                     <p className="font-medium text-destructive">
                       ❌ 错误信息：
                     </p>
                     <ul className="list-disc list-inside text-sm mt-2 max-h-40 overflow-y-auto">
-                      {result.errors.slice(0, 10).map((err: string, i: number) => (
+                      {resultErrors.slice(0, 10).map((err, i) => (
                         <li key={i}>{err}</li>
                       ))}
-                      {result.errors.length > 10 && (
-                        <li>...还有 {result.errors.length - 10} 个错误</li>
+                      {resultErrors.length > 10 && (
+                        <li>...还有 {resultErrors.length - 10} 个错误</li>
                       )}
                     </ul>
                   </div>

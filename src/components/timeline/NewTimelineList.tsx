@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useEffect } from 'react';
+import { useCallback, useState, useTransition, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { TimelineRecordCard } from './TimelineRecordCard';
@@ -9,12 +9,11 @@ import { Search, Calendar, SlidersHorizontal } from 'lucide-react';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useRealtimeRecords } from '@/hooks/useRealtime';
 import { useUser } from '@/hooks/useUser';
-import { format, parseISO, isSameMonth, isSameYear } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import {
   Collapsible,
   CollapsibleContent,
-  CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 
 interface TimelineListProps {
@@ -54,7 +53,7 @@ export function NewTimelineList({ initialRecords }: TimelineListProps) {
 
   const debouncedSearch = useDebounce(search, 500);
 
-  const fetchRecords = async (currentOffset = 0, append = false) => {
+  const fetchRecords = useCallback(async (currentOffset = 0, append = false) => {
     try {
       const newRecords = await fetchTimelineRecords({
         search: debouncedSearch,
@@ -74,22 +73,22 @@ export function NewTimelineList({ initialRecords }: TimelineListProps) {
     } catch (error) {
       console.error('Failed to fetch records:', error);
     }
-  };
+  }, [debouncedSearch, endDate, startDate]);
 
   useEffect(() => {
     startTransition(() => {
-      fetchRecords(0, false);
+      void fetchRecords(0, false);
     });
-  }, [debouncedSearch, startDate, endDate]);
+  }, [fetchRecords]);
 
   useEffect(() => {
     const handleRealtimeUpdate = () => {
-      fetchRecords(0, false);
+      void fetchRecords(0, false);
     };
 
     window.addEventListener('records-updated', handleRealtimeUpdate);
     return () => window.removeEventListener('records-updated', handleRealtimeUpdate);
-  }, []);
+  }, [fetchRecords]);
 
   const handleLoadMore = async () => {
     setIsLoadingMore(true);

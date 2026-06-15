@@ -31,6 +31,9 @@ export const ALLOWED_EXTENSIONS = [
 export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 export const MAX_COMPRESSED_SIZE = 5 * 1024 * 1024; // 5MB
 
+type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
+type AllowedExtension = (typeof ALLOWED_EXTENSIONS)[number];
+
 // ============================================
 // 类型定义
 // ============================================
@@ -38,6 +41,14 @@ export const MAX_COMPRESSED_SIZE = 5 * 1024 * 1024; // 5MB
 export interface FileValidationResult {
   valid: boolean;
   error?: string;
+}
+
+function isAllowedMimeType(type: string): type is AllowedMimeType {
+  return ALLOWED_MIME_TYPES.some((allowedType) => allowedType === type);
+}
+
+function isAllowedExtension(extension: string): extension is AllowedExtension {
+  return ALLOWED_EXTENSIONS.some((allowedExtension) => allowedExtension === extension);
 }
 
 // ============================================
@@ -52,7 +63,7 @@ export function validateImageFile(
   maxSize: number = MAX_FILE_SIZE
 ): FileValidationResult {
   // 1. MIME 类型白名单验证
-  if (!ALLOWED_MIME_TYPES.includes(file.type as any)) {
+  if (!isAllowedMimeType(file.type)) {
     return {
       valid: false,
       error: `不支持的文件类型: ${file.type}。仅允许 JPEG、PNG、WebP、AVIF`,
@@ -77,7 +88,7 @@ export function validateImageFile(
 
   // 4. 文件扩展名检查
   const ext = getFileExtension(file.name);
-  if (!ALLOWED_EXTENSIONS.includes(ext as any)) {
+  if (!isAllowedExtension(ext)) {
     return {
       valid: false,
       error: `不支持的文件扩展名: ${ext}`,
