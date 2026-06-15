@@ -33,15 +33,13 @@ export class HybridStorageProvider implements StorageProvider {
    * 2. 调用方负责保存路径到 Supabase 数据库
    */
   async upload(
-    originalFile: File,
-    compressedFile: File,
+    file: File,
     userId: string,
     recordId: string
   ): Promise<UploadResult> {
     try {
       return await this.minioProvider.upload(
-        originalFile,
-        compressedFile,
+        file,
         userId,
         recordId
       );

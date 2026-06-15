@@ -108,9 +108,14 @@ export default function GalleryPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">照片画廊</h1>
-        <p className="text-muted-foreground">共 {photos.length} 张照片</p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold">照片画廊</h1>
+          <p className="text-muted-foreground">共 {photos.length} 张照片</p>
+        </div>
+        <Link href="/records/new">
+          <Button>上传照片</Button>
+        </Link>
       </div>
 
       <GalleryFilters onFilterChange={handleFilterChange} />

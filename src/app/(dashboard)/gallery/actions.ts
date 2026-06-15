@@ -6,7 +6,6 @@ import { getGalleryPhotos } from '@/lib/db/queries/gallery';
 export interface GalleryPhoto {
   id: string;
   storage_path: string;
-  compressed_path: string | null;
   caption: string | null;
   uploaded_at: string;
   record: {
@@ -14,8 +13,8 @@ export interface GalleryPhoto {
     title: string | null;
     record_date: string;
   } | null;
-  thumbnailUrl: string; // 用于展示的压缩图 URL
-  originalUrl: string; // 用于下载的原图 URL
+  thumbnailUrl: string;
+  originalUrl: string;
 }
 
 export interface FetchGalleryFilters {
@@ -58,27 +57,22 @@ export async function fetchGalleryPhotos(
   const { getStorageProvider } = await import('@/lib/storage');
   const storage = getStorageProvider();
 
-  // 生成图片 URL（分别为压缩图和原图）
-  const compressedPaths = photos.map((p) => p.compressed_path || p.storage_path);
   const originalPaths = photos.map((p) => p.storage_path);
-
-  // 批量生成签名 URL
-  const compressedUrlMap = await storage.getSignedUrls(compressedPaths, 3600);
-  const originalUrlMap = await storage.getSignedUrls(originalPaths, 3600);
+  const originalUrlMap = originalPaths.length > 0
+    ? await storage.getSignedUrls(originalPaths, 3600)
+    : new Map<string, string>();
 
   const photosWithUrls = photos.map((photo) => {
-    const thumbnailUrl = compressedUrlMap.get(photo.compressed_path || photo.storage_path) || '';
     const originalUrl = originalUrlMap.get(photo.storage_path) || '';
 
     return {
       id: photo.id,
       storage_path: photo.storage_path,
-      compressed_path: photo.compressed_path,
       caption: photo.caption,
       uploaded_at: photo.uploaded_at,
       record: photo.record,
-      thumbnailUrl, // 压缩图用于显示
-      originalUrl, // 原图用于下载
+      thumbnailUrl: originalUrl,
+      originalUrl,
     };
   });
 

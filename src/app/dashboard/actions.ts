@@ -20,7 +20,7 @@ export async function fetchDashboardData() {
     .from('user_settings')
     .select('anniversary_date, birthday1, birthday2, name1, name2, welcome_message, quote_api_url')
     .eq('user_id', user.id)
-    .single();
+    .maybeSingle();
 
   // 计算在一起的天数
   let daysTogether = 0;

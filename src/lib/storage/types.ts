@@ -26,9 +26,7 @@ export interface StorageConfig {
 export interface UploadResult {
   success: boolean;
   originalPath?: string;
-  compressedPath?: string;
   originalUrl?: string;
-  compressedUrl?: string;
   error?: string;
 }
 
@@ -38,12 +36,7 @@ export interface DeleteResult {
 }
 
 export interface StorageProvider {
-  upload(
-    originalFile: File,
-    compressedFile: File,
-    userId: string,
-    recordId: string
-  ): Promise<UploadResult>;
+  upload(file: File, userId: string, recordId: string): Promise<UploadResult>;
 
   delete(paths: string[]): Promise<DeleteResult>;
 

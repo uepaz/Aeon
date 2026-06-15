@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { notFound, redirect } from 'next/navigation';
 import { RecordForm } from '@/components/records/RecordForm';
+import { getStorageProvider } from '@/lib/storage';
 
 export default async function EditRecordPage({
   params,
@@ -19,7 +20,20 @@ export default async function EditRecordPage({
 
   const { data: record } = await supabase
     .from('records')
-    .select('id, title, content, record_date, tags')
+    .select(
+      `
+      id,
+      title,
+      content,
+      record_date,
+      tags,
+      photos (
+        id,
+        storage_path,
+        caption
+      )
+    `
+    )
     .eq('id', id)
     .eq('user_id', user.id)
     .single();
@@ -27,6 +41,18 @@ export default async function EditRecordPage({
   if (!record) {
     notFound();
   }
+
+  const storage = getStorageProvider();
+  const photoPaths = (record.photos || []).map((photo) => photo.storage_path);
+  const urlMap = photoPaths.length > 0
+    ? await storage.getSignedUrls(photoPaths, 3600)
+    : new Map<string, string>();
+
+  const photosWithUrls = (record.photos || []).map((photo) => ({
+    id: photo.id,
+    url: urlMap.get(photo.storage_path) || '',
+    caption: photo.caption,
+  }));
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -44,6 +70,7 @@ export default async function EditRecordPage({
           recordDate: new Date(record.record_date),
           tags: (record.tags as string[]) || [],
         }}
+        initialPhotos={photosWithUrls}
       />
     </div>
   );

@@ -53,7 +53,19 @@ test('record uploads no longer compress or send a second image copy', async () =
   assert.doesNotMatch(recordFormSource, /compressImagesInParallel|compressedFile|compressedUploadFile/);
   assert.doesNotMatch(recordActionsSource, /formData\.get\(['"`]compressedFile['"`]\)/);
   assert.doesNotMatch(recordActionsSource, /compressed_size:\s*compressedFile\.size/);
-  assert.match(recordActionsSource, /compressed_path:\s*null/);
+  assert.doesNotMatch(recordActionsSource, /compressed_path:\s*uploadResult\.compressedPath/);
+  assert.match(recordActionsSource, /insertPhotoMetadata/);
+});
+
+test('record uploads tolerate an old photos table that still requires compressed_path', async () => {
+  const recordActionsSource = await readFile(
+    path.join(rootDir, 'src/app/(dashboard)/records/actions.ts'),
+    'utf8'
+  );
+
+  assert.match(recordActionsSource, /isMissingLegacyCompressedPath/);
+  assert.match(recordActionsSource, /compressed_path:\s*photoData\.storage_path/);
+  assert.doesNotMatch(recordActionsSource, /storage\.upload\([^)]*compressed/);
 });
 
 test('timeline and detail reads use the configured storage provider instead of Supabase Storage directly', async () => {
@@ -70,6 +82,43 @@ test('timeline and detail reads use the configured storage provider instead of S
     assert.doesNotMatch(source, /\.from\(['"`]record-photos['"`]\)\s*\.\s*createSignedUrl/);
     assert.doesNotMatch(source, /\.from\(['"`]record-photos['"`]\)\s*\.\s*createSignedUrls/);
   }
+});
+
+test('record edit page passes existing signed photos into the form', async () => {
+  const editPageSource = await readFile(
+    path.join(rootDir, 'src/app/(dashboard)/records/[id]/edit/page.tsx'),
+    'utf8'
+  );
+  const recordFormSource = await readFile(
+    path.join(rootDir, 'src/components/records/RecordForm.tsx'),
+    'utf8'
+  );
+
+  assert.match(editPageSource, /photos\s*\(/);
+  assert.match(editPageSource, /getStorageProvider/);
+  assert.match(editPageSource, /getSignedUrls/);
+  assert.match(editPageSource, /initialPhotos=\{photosWithUrls\}/);
+  assert.match(recordFormSource, /initialPhotos/);
+  assert.match(recordFormSource, /existingPhotos\.map/);
+  assert.match(recordFormSource, /deletePhoto\(photoId\)/);
+});
+
+test('photo schema and dependencies no longer require persisted compressed image copies', async () => {
+  const schemaSource = await readFile(
+    path.join(rootDir, 'supabase/migrations/000_schema.sql'),
+    'utf8'
+  );
+  const packageSource = await readFile(path.join(rootDir, 'package.json'), 'utf8');
+  const storageTypesSource = await readFile(
+    path.join(rootDir, 'src/lib/storage/types.ts'),
+    'utf8'
+  );
+
+  assert.doesNotMatch(schemaSource, /\bcompressed_path\b/);
+  assert.doesNotMatch(schemaSource, /\bcompressed_size\b/);
+  assert.doesNotMatch(schemaSource, /\bthumbnail_path\b/);
+  assert.doesNotMatch(packageSource, /browser-image-compression/);
+  assert.doesNotMatch(storageTypesSource, /compressedFile|compressedPath|compressedUrl/);
 });
 
 test('gallery query does not use PostgREST dot-qualified order syntax', async () => {
@@ -98,4 +147,19 @@ test('content security policy allows the configured MinIO public origin', async 
   assert.match(csp, /connect-src[^;]*http:\/\/localhost:9000/);
   assert.match(csp, /media-src[^;]*http:\/\/localhost:9000/);
   assert.doesNotMatch(csp, /upgrade-insecure-requests/);
+});
+
+test('dashboard quote fetches through a same-origin route instead of a browser-side external request', async () => {
+  const dailyQuoteSource = await readFile(
+    path.join(rootDir, 'src/components/dashboard/DailyQuote.tsx'),
+    'utf8'
+  );
+  const quoteRouteSource = await readFile(
+    path.join(rootDir, 'src/app/api/quote/route.ts'),
+    'utf8'
+  );
+
+  assert.match(dailyQuoteSource, /fetch\(quoteEndpoint/);
+  assert.doesNotMatch(dailyQuoteSource, /https:\/\/v1\.hitokoto\.cn/);
+  assert.match(quoteRouteSource, /https:\/\/v1\.hitokoto\.cn\/\?c=d&c=i&c=k/);
 });

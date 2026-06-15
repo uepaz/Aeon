@@ -6,8 +6,7 @@ export class SupabaseStorageProvider implements StorageProvider {
   private bucket = 'record-photos';
 
   async upload(
-    originalFile: File,
-    compressedFile: File,
+    file: File,
     userId: string,
     recordId: string
   ): Promise<UploadResult> {
@@ -17,16 +16,14 @@ export class SupabaseStorageProvider implements StorageProvider {
       const timestamp = Date.now();
       const randomStr = Math.random().toString(36).substring(7);
       const baseFileName = `${timestamp}-${randomStr}`;
-      const originalExtension = getImageFileExtension(originalFile.type);
-      const compressedExtension = getImageFileExtension(compressedFile.type);
+      const originalExtension = getImageFileExtension(file.type);
 
       const originalPath = `${userId}/${recordId}/original_${baseFileName}${originalExtension}`;
-      const compressedPath = `${userId}/${recordId}/compressed_${baseFileName}${compressedExtension}`;
 
       // 上传原图
       const { error: originalError } = await supabase.storage
         .from(this.bucket)
-        .upload(originalPath, originalFile);
+        .upload(originalPath, file);
 
       if (originalError) {
         return {
@@ -35,24 +32,9 @@ export class SupabaseStorageProvider implements StorageProvider {
         };
       }
 
-      // 上传压缩图
-      const { error: compressedError } = await supabase.storage
-        .from(this.bucket)
-        .upload(compressedPath, compressedFile);
-
-      if (compressedError) {
-        // 回滚：删除已上传的原图
-        await supabase.storage.from(this.bucket).remove([originalPath]);
-        return {
-          success: false,
-          error: `压缩图上传失败: ${compressedError.message}`,
-        };
-      }
-
       return {
         success: true,
         originalPath,
-        compressedPath,
       };
     } catch (error) {
       console.error('Supabase upload failed:', error);

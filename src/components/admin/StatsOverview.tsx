@@ -4,8 +4,9 @@ import { HardDrive } from 'lucide-react';
 interface StatsOverviewProps {
   stats: {
     storageUsed: string;
-    storagePercent: number;
     totalBytes?: number;
+    storageType?: string;
+    bucket?: string;
   };
 }
 
@@ -18,19 +19,16 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{stats.storageUsed}</div>
-        <div className="mt-2">
-          <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all"
-              style={{ width: `${stats.storagePercent}%` }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            已使用 {stats.storagePercent}% / 1GB 限额
+        <div className="mt-2 space-y-1">
+          <p className="text-xs text-muted-foreground">
+            存储提供者：{stats.storageType || 'hybrid'}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            存储空间：{stats.bucket || 'aeon-photos'}
           </p>
           {stats.totalBytes !== undefined && stats.totalBytes === 0 && (
             <p className="text-xs text-orange-600 mt-2">
-              💡 提示：当前没有照片数据，上传照片后存储信息将自动更新
+              提示：当前没有照片数据，上传照片后存储信息将自动更新
             </p>
           )}
         </div>

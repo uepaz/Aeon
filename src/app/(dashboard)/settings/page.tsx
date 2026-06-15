@@ -52,7 +52,7 @@ export default function SettingsPage() {
           .from('user_settings')
           .select('anniversary_date, birthday1, birthday2, name1, name2, welcome_message, quote_api_url')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (data) {
           if (data.anniversary_date) setAnniversaryDate(data.anniversary_date);

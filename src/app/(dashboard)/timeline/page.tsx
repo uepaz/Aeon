@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { getTimelineRecords } from '@/lib/db/queries/timeline';
+import { getStorageProvider } from '@/lib/storage';
 import { NewTimelineList } from '@/components/timeline/NewTimelineList';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -45,21 +46,10 @@ export default async function TimelinePage() {
     r.photos.map((p) => p.storage_path)
   );
 
-  let urlMap = new Map<string, string>();
-
-  if (allPaths.length > 0) {
-    const { data: signedUrls, error: urlError } = await supabase.storage
-      .from('record-photos')
-      .createSignedUrls(allPaths, 3600);
-
-    if (urlError) {
-      console.error('Failed to create signed URLs:', urlError);
-    }
-
-    urlMap = new Map(
-      signedUrls?.map((item, idx) => [allPaths[idx], item.signedUrl || '']) || []
-    );
-  }
+  const storage = getStorageProvider();
+  const urlMap = allPaths.length > 0
+    ? await storage.getSignedUrls(allPaths, 3600)
+    : new Map<string, string>();
 
   const recordsWithUrls = records.map((record) => ({
     ...record,
@@ -106,14 +96,22 @@ export default async function TimelinePage() {
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
-      <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-          <Clock className="h-5 w-5 text-primary" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+            <Clock className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold">时间线</h1>
+            <p className="text-sm text-muted-foreground">记录每一刻的美好</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-3xl font-bold">时间线</h1>
-          <p className="text-sm text-muted-foreground">记录每一刻的美好</p>
-        </div>
+        <Link href="/records/new">
+          <Button className="gap-2">
+            <Sparkles className="h-4 w-4" />
+            新建记录
+          </Button>
+        </Link>
       </div>
 
       {/* 时间线列表 */}

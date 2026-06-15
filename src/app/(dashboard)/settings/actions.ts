@@ -1,11 +1,12 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { getStorageProvider } from '@/lib/storage';
+import { buildImageFileName, withImageFileName } from '@/lib/utils/image-files';
 
 interface ExportPhoto {
   id: string;
   storage_path: string;
-  compressed_path: string | null;
   caption: string | null;
 }
 
@@ -44,16 +45,15 @@ export async function getAdminData() {
     throw new Error('Unauthorized');
   }
 
-  // 方案 1: 通过数据库查询照片大小（推荐）
   const { data: photos } = await supabase
     .from('photos')
-    .select('original_size, compressed_size')
+    .select('original_size')
     .eq('user_id', user.id);
 
   let totalBytes = 0;
   if (photos) {
     photos.forEach((photo) => {
-      totalBytes += (photo.original_size || 0) + (photo.compressed_size || 0);
+      totalBytes += photo.original_size || 0;
     });
   }
 
@@ -66,15 +66,18 @@ export async function getAdminData() {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  // Supabase 免费层 1GB 限制
-  const maxBytes = 1024 * 1024 * 1024;
-  const storagePercent = Math.round((totalBytes / maxBytes) * 100);
+  const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE || 'hybrid';
+  const bucket =
+    storageType === 'supabase'
+      ? 'record-photos'
+      : process.env.NEXT_PUBLIC_MINIO_BUCKET || 'aeon-photos';
 
   return {
     stats: {
       storageUsed: formatBytes(totalBytes),
-      storagePercent: Math.min(storagePercent, 100),
-      totalBytes, // 返回原始字节数，便于调试
+      totalBytes,
+      storageType,
+      bucket,
     },
   };
 }
@@ -102,7 +105,6 @@ export async function getExportData() {
       photos(
         id,
         storage_path,
-        compressed_path,
         caption
       )
     `
@@ -118,7 +120,7 @@ export async function getExportData() {
     .from('user_settings')
     .select('*')
     .eq('user_id', user.id)
-    .single();
+    .maybeSingle();
 
   const exportRecords = (allRecords || []) as ExportRecord[];
 
@@ -128,13 +130,10 @@ export async function getExportData() {
     )
   );
 
-  const { data: signedUrls } = await supabase.storage
-    .from('record-photos')
-    .createSignedUrls(allPaths, 86400);
-
-  const urlMap = new Map(
-    signedUrls?.map((item, index) => [allPaths[index], item.signedUrl]) || []
-  );
+  const storage = getStorageProvider();
+  const urlMap = allPaths.length > 0
+    ? await storage.getSignedUrls(allPaths, 86400)
+    : new Map<string, string>();
 
   const recordsWithUrls = exportRecords.map((record) => ({
     ...record,
@@ -164,6 +163,7 @@ export async function importData(formData: FormData) {
 
   const records = JSON.parse(formData.get('records') as string) as ImportRecord[];
   const photoEntries = JSON.parse(formData.get('photoEntries') as string) as Record<string, string>;
+  const storage = getStorageProvider();
 
   const results = {
     recordsImported: 0,
@@ -203,14 +203,18 @@ export async function importData(formData: FormData) {
         }
 
         try {
-          const fileName = `${user.id}/${newRecord.id}/${Date.now()}_${index}.jpg`;
-          const { error: uploadError } = await supabase.storage
-            .from('record-photos')
-            .upload(fileName, photoBlob, {
-              contentType: 'image/jpeg',
-            });
+          const response = await fetch(photoBlob);
+          const blob = await response.blob();
+          const originalFile = withImageFileName(
+            new File([blob], photo.filename || `${photo.id}.jpg`, {
+              type: blob.type || 'image/jpeg',
+            }),
+            buildImageFileName(photo.filename || `${photo.id}.jpg`, blob.type || 'image/jpeg')
+          );
 
-          if (uploadError) {
+          const uploadResult = await storage.upload(originalFile, user.id, newRecord.id);
+
+          if (!uploadResult.success || !uploadResult.originalPath) {
             results.errors.push(`照片上传失败: ${photo.filename}`);
             continue;
           }
@@ -218,11 +222,13 @@ export async function importData(formData: FormData) {
           const { error: photoError } = await supabase.from('photos').insert({
             user_id: user.id,
             record_id: newRecord.id,
-            storage_path: fileName,
+            storage_path: uploadResult.originalPath,
             caption: photo.caption,
+            original_size: originalFile.size,
           });
 
           if (photoError) {
+            await storage.delete([uploadResult.originalPath]);
             results.errors.push(`照片记录插入失败: ${photo.filename}`);
             continue;
           }

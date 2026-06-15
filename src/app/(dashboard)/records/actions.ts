@@ -3,12 +3,20 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { validatePhotoUpload } from '@/lib/validations/file';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 interface CreateRecordData {
   title?: string;
   content: string;
   recordDate: string;
   tags?: string[];
+}
+
+interface PhotoMetadata {
+  user_id: string;
+  record_id: string;
+  storage_path: string;
+  original_size: number;
 }
 
 // 创建记录
@@ -92,22 +100,16 @@ export async function deleteRecord(recordId: string) {
     throw new Error('Unauthorized');
   }
 
-  // 获取关联的照片（需要获取原图和压缩图路径）
+  // 获取关联的照片路径
   const { data: recordPhotos } = await supabase
     .from('photos')
-    .select('storage_path, compressed_path')
+    .select('storage_path')
     .eq('record_id', recordId)
     .eq('user_id', user.id);
 
-  // 删除 Storage 文件（包括原图和压缩图）
+  // 删除 Storage 文件
   if (recordPhotos && recordPhotos.length > 0) {
-    const paths: string[] = [];
-    recordPhotos.forEach((p) => {
-      paths.push(p.storage_path);
-      if (p.compressed_path) {
-        paths.push(p.compressed_path);
-      }
-    });
+    const paths = recordPhotos.map((p) => p.storage_path);
 
     // 使用存储工厂删除文件
     const { getStorageProvider } = await import('@/lib/storage');
@@ -148,15 +150,14 @@ export async function uploadPhoto(
   }
 
   const originalFile = formData.get('originalFile') as File;
-  const compressedFile = formData.get('compressedFile') as File;
 
   // ========== 1. 基础检查 ==========
-  if (!originalFile || !compressedFile) {
+  if (!originalFile) {
     return { success: false, error: 'No file provided' };
   }
 
   // ========== 2. 验证文件类型和大小（服务端） ==========
-  const validation = await validatePhotoUpload(originalFile, compressedFile);
+  const validation = await validatePhotoUpload(originalFile);
   if (!validation.valid) {
     return { success: false, error: validation.error };
   }
@@ -183,7 +184,6 @@ export async function uploadPhoto(
 
     const uploadResult = await storage.upload(
       originalFile,
-      compressedFile,
       user.id,
       recordId
     );
@@ -192,27 +192,23 @@ export async function uploadPhoto(
       return { success: false, error: uploadResult.error };
     }
 
-    // ========== 5. 保存照片记录到数据库 ==========
-    const { data: photo, error: dbError } = await supabase
-      .from('photos')
-      .insert({
-        user_id: user.id,
-        record_id: recordId,
-        storage_path: uploadResult.originalPath!,
-        compressed_path: uploadResult.compressedPath!,
-        original_size: originalFile.size,
-        compressed_size: compressedFile.size,
-      })
-      .select()
-      .single();
+    const photoData = {
+      user_id: user.id,
+      record_id: recordId,
+      storage_path: uploadResult.originalPath!,
+      original_size: originalFile.size,
+    };
 
-    if (dbError) {
+    // ========== 5. 保存照片记录到数据库 ==========
+    const { photo, error: dbError } = await insertPhotoMetadata(
+      supabase,
+      photoData
+    );
+
+    if (dbError || !photo) {
       // 回滚：删除已上传的文件
-      await storage.delete([
-        uploadResult.originalPath!,
-        uploadResult.compressedPath!,
-      ]);
-      return { success: false, error: dbError.message };
+      await storage.delete([uploadResult.originalPath!]);
+      return { success: false, error: dbError?.message || '照片记录保存失败' };
     }
 
     // ========== 6. 更新记录的照片计数 ==========
@@ -245,7 +241,7 @@ export async function deletePhoto(photoId: string) {
   // 获取照片信息
   const { data: photo } = await supabase
     .from('photos')
-    .select('storage_path, compressed_path, record_id')
+    .select('storage_path, record_id')
     .eq('id', photoId)
     .eq('user_id', user.id)
     .single();
@@ -254,11 +250,8 @@ export async function deletePhoto(photoId: string) {
     throw new Error('Photo not found');
   }
 
-  // 删除 Storage 文件（原图 + 压缩图）
+  // 删除 Storage 文件
   const pathsToRemove = [photo.storage_path];
-  if (photo.compressed_path) {
-    pathsToRemove.push(photo.compressed_path);
-  }
 
   // 使用存储工厂删除文件
   const { getStorageProvider } = await import('@/lib/storage');
@@ -284,5 +277,46 @@ export async function deletePhoto(photoId: string) {
   }
 
   revalidatePath(`/records/${photo.record_id}`);
+  revalidatePath('/timeline');
+  revalidatePath('/');
   revalidatePath('/gallery');
+}
+
+async function insertPhotoMetadata(
+  supabase: SupabaseClient,
+  photoData: PhotoMetadata
+) {
+  const insertResult = await supabase
+    .from('photos')
+    .insert(photoData)
+    .select()
+    .single();
+
+  if (!isMissingLegacyCompressedPath(insertResult.error)) {
+    return {
+      photo: insertResult.data,
+      error: insertResult.error,
+    };
+  }
+
+  const legacyInsertResult = await supabase
+    .from('photos')
+    .insert({
+      ...photoData,
+      compressed_path: photoData.storage_path,
+    })
+    .select()
+    .single();
+
+  return {
+    photo: legacyInsertResult.data,
+    error: legacyInsertResult.error,
+  };
+}
+
+function isMissingLegacyCompressedPath(error: { message?: string } | null): boolean {
+  return Boolean(
+    error?.message?.includes('compressed_path') &&
+      error.message.includes('violates not-null constraint')
+  );
 }

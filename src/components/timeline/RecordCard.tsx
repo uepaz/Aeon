@@ -5,7 +5,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Calendar } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
-import Image from 'next/image';
 
 interface RecordCardProps {
   record: {
@@ -79,12 +78,11 @@ export function RecordCard({ record }: RecordCardProps) {
                   }`}
                 >
                   {photo.url ? (
-                    <Image
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
                       src={photo.url}
                       alt={record.title || `记录照片 ${index + 1}`}
-                      fill
-                      className="object-cover"
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      className="w-full h-full object-cover"
                     />
                   ) : (
                     <div className="w-full h-full bg-muted flex items-center justify-center">

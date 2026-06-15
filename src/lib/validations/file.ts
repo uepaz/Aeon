@@ -29,7 +29,6 @@ export const ALLOWED_EXTENSIONS = [
 ] as const;
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-export const MAX_COMPRESSED_SIZE = 5 * 1024 * 1024; // 5MB
 
 type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
 type AllowedExtension = (typeof ALLOWED_EXTENSIONS)[number];
@@ -245,43 +244,14 @@ export async function validateImageFileFull(
   return { valid: true };
 }
 
-/**
- * 验证上传的原图和压缩图
- */
-export async function validatePhotoUpload(
-  originalFile: File,
-  compressedFile: File
-): Promise<FileValidationResult> {
-  // 验证原图
-  const originalValidation = await validateImageFileFull(
-    originalFile,
-    MAX_FILE_SIZE
-  );
-  if (!originalValidation.valid) {
+export async function validatePhotoUpload(file: File): Promise<FileValidationResult> {
+  const validation = await validateImageFileFull(file, MAX_FILE_SIZE);
+
+  if (!validation.valid) {
     return {
       valid: false,
-      error: `原图验证失败: ${originalValidation.error}`,
+      error: `图片验证失败: ${validation.error}`,
     };
-  }
-
-  // 验证压缩图
-  const compressedValidation = await validateImageFileFull(
-    compressedFile,
-    MAX_COMPRESSED_SIZE
-  );
-  if (!compressedValidation.valid) {
-    return {
-      valid: false,
-      error: `压缩图验证失败: ${compressedValidation.error}`,
-    };
-  }
-
-  // 验证压缩效果（压缩图应该小于原图）
-  if (compressedFile.size >= originalFile.size) {
-    console.warn(
-      `压缩图 (${compressedFile.size}) 不小于原图 (${originalFile.size})`
-    );
-    // 警告但不阻止（可能是小图片压缩不明显）
   }
 
   return { valid: true };

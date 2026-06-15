@@ -24,13 +24,13 @@ export function DailyQuote({ customApiUrl }: DailyQuoteProps) {
     let cancelled = false;
     let transitionTimeout: ReturnType<typeof setTimeout> | undefined;
 
-    // 从网络接口获取语录
     const fetchQuote = async () => {
       try {
-        // 使用自定义 API 或默认的一言 API
-        const apiUrl = customApiUrl || 'https://v1.hitokoto.cn/?c=d&c=i&c=k';
+        const quoteEndpoint = customApiUrl
+          ? `/api/quote?url=${encodeURIComponent(customApiUrl)}`
+          : '/api/quote';
 
-        const response = await fetch(apiUrl, {
+        const response = await fetch(quoteEndpoint, {
           method: 'GET',
           cache: 'no-store',
         });
@@ -40,7 +40,7 @@ export function DailyQuote({ customApiUrl }: DailyQuoteProps) {
         }
 
         const data = await response.json();
-        return data.hitokoto || fallbackQuotes[0];
+        return data.quote || fallbackQuotes[0];
       } catch (error) {
         console.error('Failed to fetch quote:', error);
         // 失败时返回随机备用语录

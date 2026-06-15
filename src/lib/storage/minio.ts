@@ -52,8 +52,7 @@ export class MinioStorageProvider implements StorageProvider {
   }
 
   async upload(
-    originalFile: File,
-    compressedFile: File,
+    file: File,
     userId: string,
     recordId: string
   ): Promise<UploadResult> {
@@ -61,38 +60,24 @@ export class MinioStorageProvider implements StorageProvider {
       const timestamp = Date.now();
       const randomStr = Math.random().toString(36).substring(7);
       const baseFileName = `${timestamp}-${randomStr}`;
-      const originalExtension = getImageFileExtension(originalFile.type);
-      const compressedExtension = getImageFileExtension(compressedFile.type);
+      const originalExtension = getImageFileExtension(file.type);
 
       const originalPath = `${userId}/${recordId}/original_${baseFileName}${originalExtension}`;
-      const compressedPath = `${userId}/${recordId}/compressed_${baseFileName}${compressedExtension}`;
 
       // 上传原图
-      const originalBuffer = Buffer.from(await originalFile.arrayBuffer());
+      const originalBuffer = Buffer.from(await file.arrayBuffer());
       await this.client.send(
         new PutObjectCommand({
           Bucket: this.bucket,
           Key: originalPath,
           Body: originalBuffer,
-          ContentType: getImageContentType(originalFile),
-        })
-      );
-
-      // 上传压缩图
-      const compressedBuffer = Buffer.from(await compressedFile.arrayBuffer());
-      await this.client.send(
-        new PutObjectCommand({
-          Bucket: this.bucket,
-          Key: compressedPath,
-          Body: compressedBuffer,
-          ContentType: getImageContentType(compressedFile),
+          ContentType: getImageContentType(file),
         })
       );
 
       return {
         success: true,
         originalPath,
-        compressedPath,
       };
     } catch (error) {
       console.error('MinIO upload failed:', error);

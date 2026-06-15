@@ -18,23 +18,37 @@ import { CalendarIcon, Upload, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { compressImagesInParallel, validateImageFile } from '@/lib/utils/image';
+import { validateImageFile } from '@/lib/utils/image';
 import { buildImageFileName, withImageFileName } from '@/lib/utils/image-files';
 import {
   createRecord,
+  deletePhoto,
   updateRecord,
   uploadPhoto,
 } from '@/app/(dashboard)/records/actions';
 import { useRouter } from 'next/navigation';
 
+interface ExistingPhoto {
+  id: string;
+  url: string;
+  caption?: string | null;
+}
+
 interface RecordFormProps {
   defaultValues?: Partial<RecordFormData> & { id?: string };
+  initialPhotos?: ExistingPhoto[];
   mode: 'create' | 'edit';
 }
 
-export function RecordForm({ defaultValues, mode }: RecordFormProps) {
+export function RecordForm({
+  defaultValues,
+  initialPhotos = [],
+  mode,
+}: RecordFormProps) {
+  const [existingPhotos, setExistingPhotos] = useState(initialPhotos);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const router = useRouter();
 
   const {
@@ -62,14 +76,30 @@ export function RecordForm({ defaultValues, mode }: RecordFormProps) {
         continue;
       }
 
-      // 只保存原始文件用于预览
-      // 压缩会在上传时进行
       setUploadedFiles((prev) => [...prev, file]);
     }
   };
 
   const removeFile = (index: number) => {
     setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const removeExistingPhoto = async (photoId: string) => {
+    if (!confirm('确定删除这张照片吗？')) {
+      return;
+    }
+
+    setDeletingPhotoId(photoId);
+    try {
+      await deletePhoto(photoId);
+      setExistingPhotos((prev) => prev.filter((photo) => photo.id !== photoId));
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      alert('删除照片失败');
+    } finally {
+      setDeletingPhotoId(null);
+    }
   };
 
   const updateExistingRecord = (recordId: string | undefined, data: RecordFormData) => {
@@ -99,23 +129,16 @@ export function RecordForm({ defaultValues, mode }: RecordFormProps) {
             })
           : await updateExistingRecord(defaultValues?.id, data);
 
-      // 上传照片（同时上传原图和压缩图）
+      // 上传照片：自建 MinIO 只保存原图
       if (uploadedFiles.length > 0 && record) {
         for (const file of uploadedFiles) {
-          // 并行生成两个版本：原图（高质量）和压缩图（显示用）
-          const { originalFile, compressedFile } = await compressImagesInParallel(file);
           const originalUploadFile = withImageFileName(
-            originalFile,
-            buildImageFileName(file.name, 'original', originalFile.type)
-          );
-          const compressedUploadFile = withImageFileName(
-            compressedFile,
-            buildImageFileName(file.name, 'compressed', compressedFile.type)
+            file,
+            buildImageFileName(file.name, file.type)
           );
 
           const formData = new FormData();
           formData.append('originalFile', originalUploadFile, originalUploadFile.name);
-          formData.append('compressedFile', compressedUploadFile, compressedUploadFile.name);
 
           const result = await uploadPhoto(record.id, formData);
           if (!result.success) {
@@ -205,6 +228,30 @@ export function RecordForm({ defaultValues, mode }: RecordFormProps) {
       <div className="space-y-4">
         <Label>照片 (可选)</Label>
         <div className="flex flex-wrap gap-4">
+          {existingPhotos.map((photo) => (
+            <div key={photo.id} className="relative w-24 h-24">
+              {photo.url ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={photo.url}
+                  alt={photo.caption || '已上传照片'}
+                  className="w-full h-full object-cover rounded"
+                />
+              ) : (
+                <div className="w-full h-full rounded bg-muted" />
+              )}
+              <button
+                type="button"
+                onClick={() => removeExistingPhoto(photo.id)}
+                disabled={deletingPhotoId === photo.id}
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 disabled:opacity-50"
+                aria-label="删除已上传照片"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+
           {uploadedFiles.map((file, index) => (
             <div key={index} className="relative w-24 h-24">
               {/* eslint-disable-next-line @next/next/no-img-element */}

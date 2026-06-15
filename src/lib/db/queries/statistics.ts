@@ -9,7 +9,7 @@ export async function getDashboardStatistics(userId: string) {
     .from('user_settings')
     .select('anniversary_date')
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
 
   // 计算在一起天数
   const anniversaryDate = settings?.anniversary_date

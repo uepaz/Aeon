@@ -11,7 +11,6 @@ export interface ExportRecord {
   photos: Array<{
     id: string;
     storage_path: string;
-    compressed_path: string | null;
     caption: string | null;
     originalUrl: string; // 用于下载的原图 URL
   }>;

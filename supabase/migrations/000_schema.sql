@@ -32,11 +32,8 @@ CREATE TABLE IF NOT EXISTS public.photos (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   record_id UUID REFERENCES public.records(id) ON DELETE CASCADE,
   storage_path TEXT NOT NULL,
-  compressed_path TEXT NOT NULL,
-  thumbnail_path TEXT,
   caption TEXT,
   original_size INTEGER,
-  compressed_size INTEGER,
   uploaded_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 

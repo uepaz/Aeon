@@ -33,7 +33,6 @@ export async function getGalleryPhotos(filters: GalleryFilters) {
       `
       id,
       storage_path,
-      compressed_path,
       caption,
       uploaded_at,
       record_id,
@@ -86,7 +85,6 @@ function normalizeGalleryPhotos(
   photos: Array<{
     id: string;
     storage_path: string;
-    compressed_path: string | null;
     caption: string | null;
     uploaded_at: string;
     records: EmbeddedRecord | EmbeddedRecord[] | null;
@@ -95,7 +93,6 @@ function normalizeGalleryPhotos(
   return photos.map((photo) => ({
     id: photo.id,
     storage_path: photo.storage_path,
-    compressed_path: photo.compressed_path,
     caption: photo.caption,
     uploaded_at: photo.uploaded_at,
     record: normalizeEmbeddedRecord(photo.records),

@@ -7,6 +7,7 @@ import { ArrowLeft, Calendar, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { DeleteRecordButton } from '@/components/records/DeleteRecordButton';
+import { getStorageProvider } from '@/lib/storage';
 
 export default async function RecordDetailPage({
   params,
@@ -48,18 +49,16 @@ export default async function RecordDetailPage({
     notFound();
   }
 
-  // 生成照片的签名 URL
-  const photosWithUrls = await Promise.all(
-    (record.photos || []).map(async (photo) => {
-      const { data } = await supabase.storage
-        .from('record-photos')
-        .createSignedUrl(photo.storage_path, 3600);
-      return {
-        ...photo,
-        url: data?.signedUrl || '',
-      };
-    })
-  );
+  const storage = getStorageProvider();
+  const photoPaths = (record.photos || []).map((photo) => photo.storage_path);
+  const urlMap = photoPaths.length > 0
+    ? await storage.getSignedUrls(photoPaths, 3600)
+    : new Map<string, string>();
+
+  const photosWithUrls = (record.photos || []).map((photo) => ({
+    ...photo,
+    url: urlMap.get(photo.storage_path) || '',
+  }));
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">

@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { getCalendarRecords } from '@/lib/db/queries/calendar';
 import { getTimelineRecords } from '@/lib/db/queries/timeline';
+import { getStorageProvider } from '@/lib/storage';
 
 export interface CalendarRecord {
   id: string;
@@ -62,14 +63,10 @@ export async function fetchDayRecords(date: string): Promise<CalendarRecord[]> {
     r.photos.map((p) => p.storage_path)
   );
 
-  const { data: signedUrls } = await supabase.storage
-    .from('record-photos')
-    .createSignedUrls(allPaths, 3600);
-
-  // 创建路径 -> URL 映射
-  const urlMap = new Map(
-    signedUrls?.map((item, idx) => [allPaths[idx], item.signedUrl]) || []
-  );
+  const storage = getStorageProvider();
+  const urlMap = allPaths.length > 0
+    ? await storage.getSignedUrls(allPaths, 3600)
+    : new Map<string, string>();
 
   // 将 URL 映射回记录
   const recordsWithUrls = records.map((record) => ({
