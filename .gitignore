@@ -53,6 +53,7 @@ Thumbs.db
 
 # Local development
 .claude/
+.playwright-mcp/
 
 # Temporary files
 *.tmp
