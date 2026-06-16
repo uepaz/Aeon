@@ -41,18 +41,22 @@ export class StorageFactory {
     const minioUseSSL = process.env.NEXT_PUBLIC_MINIO_USE_SSL === 'true';
 
     if (storageType === 'hybrid' || storageType === 'minio') {
+      // MinIO 凭证仅在服务端使用，绝不暴露到客户端
+      const accessKey = process.env.MINIO_ACCESS_KEY;
+      const secretKey = process.env.MINIO_SECRET_KEY;
+
+      if (!accessKey || !secretKey) {
+        throw new Error(
+          'MinIO credentials not configured. Please set MINIO_ACCESS_KEY and MINIO_SECRET_KEY environment variables.'
+        );
+      }
+
       return {
         type: storageType,
         minio: {
           endpoint: minioEndpoint,
-          accessKey:
-            process.env.MINIO_ACCESS_KEY ||
-            process.env.NEXT_PUBLIC_MINIO_ACCESS_KEY ||
-            'admin',
-          secretKey:
-            process.env.MINIO_SECRET_KEY ||
-            process.env.NEXT_PUBLIC_MINIO_SECRET_KEY ||
-            'minioadmin123',
+          accessKey,
+          secretKey,
           bucket: process.env.NEXT_PUBLIC_MINIO_BUCKET || 'aeon-photos',
           port: minioPort,
           useSSL: minioUseSSL,
