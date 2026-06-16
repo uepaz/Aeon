@@ -209,6 +209,23 @@ export function ShowcaseClient({ images }: ShowcaseClientProps) {
 
       <div className="memory-container" id="memoryContainer" />
       <div className="vignette" />
+
+      {/* 空状态提示 */}
+      {images.length === 0 && (
+        <div className="fixed inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <div className="text-center space-y-4 px-4">
+            <h2 className="text-4xl font-bold text-text-primary" style={{ fontFamily: 'var(--font-noto-serif-sc)' }}>
+              Aeon
+            </h2>
+            <p className="text-lg text-text-secondary">
+              记录美好时光
+            </p>
+            <p className="text-sm text-text-secondary/70">
+              点击进入应用
+            </p>
+          </div>
+        </div>
+      )}
     </>
   );
 }

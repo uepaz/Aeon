@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Collapsible,
@@ -33,6 +34,7 @@ export default function SettingsPage() {
   const [name2, setName2] = useState('');
   const [welcomeMessage, setWelcomeMessage] = useState('');
   const [quoteApiUrl, setQuoteApiUrl] = useState('');
+  const [showcasePublic, setShowcasePublic] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [birthdayOpen, setBirthdayOpen] = useState(false);
@@ -50,7 +52,7 @@ export default function SettingsPage() {
       if (user) {
         const { data } = await supabase
           .from('user_settings')
-          .select('anniversary_date, birthday1, birthday2, name1, name2, welcome_message, quote_api_url')
+          .select('anniversary_date, birthday1, birthday2, name1, name2, welcome_message, quote_api_url, showcase_public')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -62,6 +64,7 @@ export default function SettingsPage() {
           if (data.name2) setName2(data.name2);
           if (data.welcome_message) setWelcomeMessage(data.welcome_message);
           if (data.quote_api_url) setQuoteApiUrl(data.quote_api_url);
+          setShowcasePublic(data.showcase_public ?? false);
         }
       }
     };
@@ -89,6 +92,7 @@ export default function SettingsPage() {
           name2: name2 || null,
           welcome_message: welcomeMessage || null,
           quote_api_url: quoteApiUrl || null,
+          showcase_public: showcasePublic,
         },
         {
           onConflict: 'user_id',
@@ -126,6 +130,30 @@ export default function SettingsPage() {
 
         {/* 基本设置 */}
         <TabsContent value="general" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Showcase 页面设置</CardTitle>
+              <CardDescription>
+                控制首页照片墙是否对未登录用户可见
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="showcase-public">允许公开访问</Label>
+                  <p className="text-sm text-muted-foreground">
+                    开启后，未登录用户也可以看到首页的照片动画
+                  </p>
+                </div>
+                <Switch
+                  id="showcase-public"
+                  checked={showcasePublic}
+                  onCheckedChange={setShowcasePublic}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>纪念日设置</CardTitle>
