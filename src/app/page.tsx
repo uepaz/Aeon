@@ -10,25 +10,20 @@ export default async function ShowcasePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // 如果未登录，检查是否有任何用户开启了公开访问
-  let canViewShowcase = Boolean(user);
-  let showLimit = 20;
+  let photos: { storage_path: string; thumbnail_path: string | null }[] | null =
+    null;
+  let hasPublicAccess = false;  // 标记是否有用户开启了公开访问
 
   if (!user) {
-    const { data: publicSettings } = await supabase
-      .from('user_settings')
-      .select('showcase_public, show_limit')
-      .eq('showcase_public', true)
-      .limit(1)
-      .maybeSingle();
-
-    canViewShowcase = Boolean(publicSettings);
-    // 如果有用户开启了公开访问，使用其配置的数量（否则保持默认 20）
-    if (publicSettings?.show_limit) {
-      showLimit = publicSettings.show_limit;
-    }
+    // 未登录：通过 SECURITY DEFINER 函数获取公开 showcase 照片。
+    // 函数内部强制 showcase_public = true 且仅返回路径字段，
+    // anon 无法直接读取 user_settings / photos（见 001_enable_rls.sql）。
+    const { data } = await supabase.rpc('get_showcase_photos');
+    photos = data;
+    hasPublicAccess = Boolean(data && data.length > 0);
   } else {
     // 已登录用户使用自己的配置
+    let showLimit = 20;
     const { data: userSettings } = await supabase
       .from('user_settings')
       .select('show_limit')
@@ -38,19 +33,20 @@ export default async function ShowcasePage() {
     if (userSettings?.show_limit) {
       showLimit = userSettings.show_limit;
     }
+
+    const { data } = await supabase
+      .from('photos')
+      .select('storage_path, thumbnail_path')
+      .order('uploaded_at', { ascending: false })
+      .limit(showLimit);
+    photos = data;
+    hasPublicAccess = true;  // 已登录用户始终能看到动画
   }
 
-  // 如果不能查看，返回空照片数组
-  if (!canViewShowcase) {
-    return <ShowcaseClient images={[]} />;
+  // 没有照片（未公开或无数据）→ 空动画
+  if (!photos || photos.length === 0) {
+    return <ShowcaseClient images={[]} hasPublicAccess={hasPublicAccess} />;
   }
-
-  // 获取照片（优先使用缩略图）
-  const { data: photos } = await supabase
-    .from('photos')
-    .select('storage_path, thumbnail_path')
-    .order('uploaded_at', { ascending: false })
-    .limit(showLimit);
 
   const storage = getStorageProvider();
   // 优先使用缩略图，回退到原图
@@ -62,5 +58,5 @@ export default async function ShowcasePage() {
     .map((path) => urlMap.get(path) || '')
     .filter((url): url is string => Boolean(url));
 
-  return <ShowcaseClient images={photoUrls} />;
+  return <ShowcaseClient images={photoUrls} hasPublicAccess={hasPublicAccess} />;
 }

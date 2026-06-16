@@ -21,12 +21,13 @@ const notoSerifSC = Noto_Serif_SC({
 
 interface ShowcaseClientProps {
   images: string[];
+  hasPublicAccess: boolean;  // 是否有用户开启了公开访问
 }
 
-export function ShowcaseClient({ images }: ShowcaseClientProps) {
+export function ShowcaseClient({ images, hasPublicAccess }: ShowcaseClientProps) {
   const router = useRouter();
   const [loadedImages, setLoadedImages] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [showAnimation, setShowAnimation] = useState(false);  // 是否已进入动画墙
   const isNavigatingRef = useRef(false);
 
   useEffect(() => {
@@ -41,6 +42,14 @@ export function ShowcaseClient({ images }: ShowcaseClientProps) {
           data: { user },
         } = await supabase.auth.getUser();
 
+        // 未登录 + 有公开访问 + 尚未进入动画墙 → 第一次点击进入动画墙
+        if (!user && hasPublicAccess && !showAnimation) {
+          setShowAnimation(true);
+          isNavigatingRef.current = false;
+          return;
+        }
+
+        // 其他情况（已登录/无公开访问/已在动画墙）→ 跳转
         router.push(user ? '/dashboard' : '/login');
       } catch (error) {
         console.error('Navigation error:', error);
@@ -53,12 +62,11 @@ export function ShowcaseClient({ images }: ShowcaseClientProps) {
       document.body.removeEventListener('click', handleClick);
       isNavigatingRef.current = false;
     };
-  }, [router]);
+  }, [router, hasPublicAccess, showAnimation]);
 
   // 预加载所有图片
   useEffect(() => {
     if (images.length === 0) {
-      setIsLoading(false);
       return;
     }
 
@@ -71,16 +79,9 @@ export function ShowcaseClient({ images }: ShowcaseClientProps) {
         loadedCount++;
         newLoadedImages.push(src);
         setLoadedImages([...newLoadedImages]);
-
-        if (loadedCount === images.length) {
-          setIsLoading(false);
-        }
       };
       img.onerror = () => {
         loadedCount++;
-        if (loadedCount === images.length) {
-          setIsLoading(false);
-        }
       };
       img.src = src;
     });
@@ -141,7 +142,7 @@ export function ShowcaseClient({ images }: ShowcaseClientProps) {
       clearInterval(memorySpawns);
       clearInterval(irregularSpawns);
     };
-  }, [loadedImages]);
+  }, [loadedImages, showAnimation]);  // showAnimation 变化时重新触发动画
 
   return (
     <>
@@ -256,20 +257,8 @@ export function ShowcaseClient({ images }: ShowcaseClientProps) {
       <div className="memory-container" id="memoryContainer" />
       <div className="vignette" />
 
-      {/* 加载指示器 */}
-      {isLoading && images.length > 0 && (
-        <div className="fixed inset-0 flex items-center justify-center z-10 pointer-events-none">
-          <div className="text-center space-y-4 px-4">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-text-secondary border-t-accent"></div>
-            <p className="text-lg text-text-secondary">
-              加载照片中... {loadedImages.length}/{images.length}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* 空状态提示 */}
-      {images.length === 0 && (
+      {/* 空状态提示（未进入动画墙时显示） */}
+      {images.length === 0 && !showAnimation && (
         <div className="fixed inset-0 flex items-center justify-center z-10 pointer-events-none">
           <div className="text-center space-y-4 px-4">
             <h2 className="text-4xl font-bold text-text-primary" style={{ fontFamily: 'var(--font-noto-serif-sc)' }}>
@@ -280,6 +269,17 @@ export function ShowcaseClient({ images }: ShowcaseClientProps) {
             </p>
             <p className="text-sm text-text-secondary/70">
               点击进入应用
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 动画墙提示（未登录 + 有公开访问 + 已显示动画时） */}
+      {hasPublicAccess && showAnimation && images.length > 0 && (
+        <div className="fixed inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <div className="text-center space-y-2 px-4">
+            <p className="text-sm text-text-secondary/70">
+              再次点击进入登录
             </p>
           </div>
         </div>

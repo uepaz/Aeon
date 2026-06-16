@@ -280,14 +280,86 @@ export default function SettingsPage() {
             </Card>
           </Collapsible>
 
-          <div className="flex items-center gap-4">
-            <Button onClick={handleSave} disabled={loading}>
-              {loading ? '保存中...' : '保存所有设置'}
-            </Button>
-            {saved && (
-              <span className="text-sm text-green-600">✓ 已保存！</span>
-            )}
-          </div>
+          <Collapsible open={showcaseOpen} onOpenChange={setShowcaseOpen}>
+            <Card>
+              <CollapsibleTrigger className="w-full">
+                <CardHeader className="cursor-pointer hover:bg-accent/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="text-left">
+                      <CardTitle>Showcase 页面设置</CardTitle>
+                      <CardDescription>
+                        控制首页照片动画的显示行为
+                      </CardDescription>
+                    </div>
+                    {showcaseOpen ? (
+                      <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    )}
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="showcase-public">允许公开访问</Label>
+                      <p className="text-sm text-muted-foreground">
+                        开启后，未登录用户也可以看到首页的照片动画
+                      </p>
+                    </div>
+                    <Switch
+                      id="showcase-public"
+                      checked={showcasePublic}
+                      onCheckedChange={setShowcasePublic}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="show-limit">照片数量</Label>
+                    <div className="flex items-center gap-4">
+                      <Input
+                        id="show-limit"
+                        type="number"
+                        min={5}
+                        max={100}
+                        value={showLimitDraft}
+                        onChange={(e) => setShowLimitDraft(e.target.value)}
+                        onBlur={() => {
+                          const val = parseInt(showLimitDraft, 10);
+                          if (!isNaN(val) && val >= 5 && val <= 100) {
+                            setShowLimit(val);
+                          } else {
+                            setShowLimitDraft(String(showLimit));
+                          }
+                        }}
+                        className="w-24"
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        首页动画使用的照片池大小（5-100）
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      数值越大，照片越不容易重复，但首屏加载越慢
+                    </p>
+                  </div>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <Button onClick={handleSave} disabled={loading}>
+                  {loading ? '保存中...' : '保存所有设置'}
+                </Button>
+                {saved && (
+                  <span className="text-sm text-green-600">✓ 已保存！</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* 数据管理 */}
@@ -345,76 +417,6 @@ export default function SettingsPage() {
           <AdminPanel />
         </TabsContent>
       </Tabs>
-
-      {/* Showcase 页面设置 - 位于所有 Tabs 之后的可折叠卡片 */}
-      <Collapsible open={showcaseOpen} onOpenChange={setShowcaseOpen}>
-        <Card>
-          <CollapsibleTrigger className="w-full">
-            <CardHeader className="cursor-pointer hover:bg-accent/50 transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="text-left">
-                  <CardTitle>Showcase 页面设置</CardTitle>
-                  <CardDescription>
-                    控制首页照片动画的显示行为
-                  </CardDescription>
-                </div>
-                {showcaseOpen ? (
-                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                )}
-              </div>
-            </CardHeader>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="showcase-public">允许公开访问</Label>
-                  <p className="text-sm text-muted-foreground">
-                    开启后，未登录用户也可以看到首页的照片动画
-                  </p>
-                </div>
-                <Switch
-                  id="showcase-public"
-                  checked={showcasePublic}
-                  onCheckedChange={setShowcasePublic}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="show-limit">照片数量</Label>
-                <div className="flex items-center gap-4">
-                  <Input
-                    id="show-limit"
-                    type="number"
-                    min={5}
-                    max={100}
-                    value={showLimitDraft}
-                    onChange={(e) => setShowLimitDraft(e.target.value)}
-                    onBlur={() => {
-                      const val = parseInt(showLimitDraft, 10);
-                      if (!isNaN(val) && val >= 5 && val <= 100) {
-                        setShowLimit(val);
-                      } else {
-                        // 校验失败，恢复显示原值
-                        setShowLimitDraft(String(showLimit));
-                      }
-                    }}
-                    className="w-24"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    首页动画使用的照片池大小（5-100）
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  数值越大，照片越不容易重复，但首屏加载越慢
-                </p>
-              </div>
-            </CardContent>
-          </CollapsibleContent>
-        </Card>
-      </Collapsible>
     </div>
   );
 }
