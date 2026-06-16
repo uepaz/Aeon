@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Inter, Noto_Serif_SC } from 'next/font/google';
 import { createClient } from '@/lib/supabase/client';
@@ -27,19 +27,32 @@ export function ShowcaseClient({ images }: ShowcaseClientProps) {
   const router = useRouter();
   const [loadedImages, setLoadedImages] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const isNavigatingRef = useRef(false);
 
   useEffect(() => {
     const handleClick = async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // 防止重复点击
+      if (isNavigatingRef.current) return;
+      isNavigatingRef.current = true;
 
-      router.push(user ? '/dashboard' : '/login');
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        router.push(user ? '/dashboard' : '/login');
+      } catch (error) {
+        console.error('Navigation error:', error);
+        isNavigatingRef.current = false;
+      }
     };
 
     document.body.addEventListener('click', handleClick);
-    return () => document.body.removeEventListener('click', handleClick);
+    return () => {
+      document.body.removeEventListener('click', handleClick);
+      isNavigatingRef.current = false;
+    };
   }, [router]);
 
   // 预加载所有图片
