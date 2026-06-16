@@ -165,6 +165,18 @@ export async function uploadPhoto(
     return { success: false, error: 'Unauthorized' };
   }
 
+  // ========== 速率限制检查 ==========
+  const { uploadRateLimit, checkRateLimit } = await import('@/lib/rate-limit');
+  const rateCheck = await checkRateLimit(user.id, uploadRateLimit);
+
+  if (!rateCheck.allowed) {
+    const resetDate = new Date(rateCheck.reset);
+    return {
+      success: false,
+      error: `上传频率过高，请在 ${resetDate.toLocaleTimeString('zh-CN')} 后重试`,
+    };
+  }
+
   const originalFile = formData.get('originalFile') as File;
   const thumbnailFile = formData.get('thumbnailFile') as File | null;
 
