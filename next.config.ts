@@ -5,6 +5,13 @@ const nextConfig: NextConfig = {
   // Enable standalone output for Docker
   output: 'standalone',
 
+  // Server Actions configuration
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb', // 支持最大 10MB 的照片上传
+    },
+  },
+
   // Security headers
   async headers() {
     return [

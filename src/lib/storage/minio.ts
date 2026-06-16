@@ -1,23 +1,18 @@
-import { S3Client, PutObjectCommand, DeleteObjectsCommand, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { S3Client, PutObjectCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import type { StorageProvider, UploadResult, DeleteResult } from './types';
 import { getImageContentType, getImageFileExtension } from '@/lib/utils/image-files';
 
 export class MinioStorageProvider implements StorageProvider {
   private client: S3Client;
-  private signingClient: S3Client;
   private bucket: string;
 
   constructor(config: {
     endpoint: string;
-    publicEndpoint?: string;
     accessKey: string;
     secretKey: string;
     bucket: string;
     port?: number;
-    publicPort?: number;
     useSSL?: boolean;
-    publicUseSSL?: boolean;
   }) {
     this.bucket = config.bucket;
 
@@ -26,28 +21,15 @@ export class MinioStorageProvider implements StorageProvider {
       config.port,
       config.useSSL
     );
-    const publicEndpoint = buildEndpointUrl(
-      config.publicEndpoint || config.endpoint,
-      config.publicPort ?? config.port,
-      config.publicUseSSL ?? config.useSSL
-    );
 
-    const clientConfig = {
+    this.client = new S3Client({
       region: 'us-east-1', // MinIO 忽略 region，但必须提供
       credentials: {
         accessKeyId: config.accessKey,
         secretAccessKey: config.secretKey,
       },
-      forcePathStyle: true, // MinIO 需要 path-style
-    };
-
-    this.client = new S3Client({
-      ...clientConfig,
       endpoint: internalEndpoint,
-    });
-    this.signingClient = new S3Client({
-      ...clientConfig,
-      endpoint: publicEndpoint,
+      forcePathStyle: true, // MinIO 需要 path-style
     });
   }
 
@@ -113,17 +95,14 @@ export class MinioStorageProvider implements StorageProvider {
     }
   }
 
-  async getSignedUrl(path: string, expiresIn: number = 3600): Promise<string> {
+  async getSignedUrl(path: string, _expiresIn: number = 3600): Promise<string> {
     try {
-      const command = new GetObjectCommand({
-        Bucket: this.bucket,
-        Key: path,
-      });
-
-      const signedUrl = await getSignedUrl(this.signingClient, command, { expiresIn });
-      return signedUrl;
+      // 不再返回 MinIO 预签名 URL，改为返回 Next.js API 代理路径
+      // 这样 MinIO 可以完全隐藏在 Docker 内部，不需要暴露端口
+      // 权限检查在 API 路由中基于 user.id 与路径前缀完成
+      return `/api/storage/${path}`;
     } catch (error) {
-      console.error('Failed to generate signed URL:', error);
+      console.error('Failed to generate storage URL:', error);
       return '';
     }
   }

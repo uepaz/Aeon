@@ -14,14 +14,11 @@ export class HybridStorageProvider implements StorageProvider {
 
   constructor(config: {
     endpoint: string;
-    publicEndpoint?: string;
     accessKey: string;
     secretKey: string;
     bucket: string;
     port?: number;
-    publicPort?: number;
     useSSL?: boolean;
-    publicUseSSL?: boolean;
   }) {
     // MinIO 负责文件存储
     this.minioProvider = new MinioStorageProvider(config);

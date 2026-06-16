@@ -39,23 +39,12 @@ export class StorageFactory {
       ? parseInt(process.env.NEXT_PUBLIC_MINIO_PORT)
       : 9000;
     const minioUseSSL = process.env.NEXT_PUBLIC_MINIO_USE_SSL === 'true';
-    const publicEndpoint =
-      process.env.NEXT_PUBLIC_MINIO_PUBLIC_ENDPOINT ||
-      (minioEndpoint === 'minio' ? 'localhost' : minioEndpoint);
-    const publicPort = process.env.NEXT_PUBLIC_MINIO_PUBLIC_PORT
-      ? parseInt(process.env.NEXT_PUBLIC_MINIO_PUBLIC_PORT)
-      : minioPort;
-    const publicUseSSL =
-      process.env.NEXT_PUBLIC_MINIO_PUBLIC_USE_SSL !== undefined
-        ? process.env.NEXT_PUBLIC_MINIO_PUBLIC_USE_SSL === 'true'
-        : minioUseSSL;
 
     if (storageType === 'hybrid' || storageType === 'minio') {
       return {
         type: storageType,
         minio: {
           endpoint: minioEndpoint,
-          publicEndpoint,
           accessKey:
             process.env.MINIO_ACCESS_KEY ||
             process.env.NEXT_PUBLIC_MINIO_ACCESS_KEY ||
@@ -66,9 +55,7 @@ export class StorageFactory {
             'minioadmin123',
           bucket: process.env.NEXT_PUBLIC_MINIO_BUCKET || 'aeon-photos',
           port: minioPort,
-          publicPort,
           useSSL: minioUseSSL,
-          publicUseSSL,
         },
       };
     }

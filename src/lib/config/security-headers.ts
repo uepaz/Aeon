@@ -11,12 +11,6 @@ interface SecurityHeader {
 }
 
 export function createSecurityHeaders(): SecurityHeader[] {
-  const minioOrigins = getMinioPublicOrigins();
-  const storageSources = ['https://*.supabase.co', ...minioOrigins].join(' ');
-  const shouldUpgradeInsecureRequests = minioOrigins.every(
-    (origin) => !origin.startsWith('http://')
-  );
-
   return [
   // Content Security Policy (CSP)
   {
@@ -31,17 +25,17 @@ export function createSecurityHeaders(): SecurityHeader[] {
       // 样式：允许同源 + 内联样式（Tailwind 需要）
       "style-src 'self' 'unsafe-inline'",
 
-      // 图片：允许同源 + Supabase/MinIO Storage + data URI
-      `img-src 'self' data: blob: ${storageSources}`,
+      // 图片：允许同源（MinIO 通过 /api/storage 代理）+ Supabase Storage + data URI
+      "img-src 'self' data: blob: https://*.supabase.co",
 
       // 字体：允许同源 + data URI
       "font-src 'self' data:",
 
-      // 连接：允许同源 + Supabase API + MinIO 下载
-      `connect-src 'self' https://*.supabase.co wss://*.supabase.co ${minioOrigins.join(' ')}`,
+      // 连接：允许同源（/api/storage 代理）+ Supabase API
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
 
-      // 媒体：允许同源 + Supabase/MinIO Storage
-      `media-src 'self' ${storageSources}`,
+      // 媒体：允许同源（MinIO 通过 /api/storage 代理）+ Supabase Storage
+      "media-src 'self' https://*.supabase.co",
 
       // 对象（Flash 等）：禁止
       "object-src 'none'",
@@ -55,8 +49,8 @@ export function createSecurityHeaders(): SecurityHeader[] {
       // Frame 祖先：禁止（防止点击劫持）
       "frame-ancestors 'none'",
 
-      // 升级不安全请求（HTTP → HTTPS）。本地 HTTP MinIO 不能启用，否则图片会被升级成 HTTPS。
-      ...(shouldUpgradeInsecureRequests ? ['upgrade-insecure-requests'] : []),
+      // 升级不安全请求（HTTP → HTTPS）
+      "upgrade-insecure-requests",
     ].join('; '),
   },
 
@@ -112,46 +106,6 @@ export function createSecurityHeaders(): SecurityHeader[] {
 }
 
 export const securityHeaders = createSecurityHeaders();
-
-function getMinioPublicOrigins(): string[] {
-  const storageType = process.env.NEXT_PUBLIC_STORAGE_TYPE;
-  if (storageType === 'supabase') {
-    return [];
-  }
-
-  const internalEndpoint = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
-  const endpoint =
-    process.env.NEXT_PUBLIC_MINIO_PUBLIC_ENDPOINT ||
-    (internalEndpoint === 'minio' ? 'localhost' : internalEndpoint);
-
-  if (!endpoint) {
-    return [];
-  }
-
-  const port = process.env.NEXT_PUBLIC_MINIO_PUBLIC_PORT
-    ? parseInt(process.env.NEXT_PUBLIC_MINIO_PUBLIC_PORT)
-    : process.env.NEXT_PUBLIC_MINIO_PORT
-      ? parseInt(process.env.NEXT_PUBLIC_MINIO_PORT)
-      : undefined;
-  const useSSL =
-    process.env.NEXT_PUBLIC_MINIO_PUBLIC_USE_SSL !== undefined
-      ? process.env.NEXT_PUBLIC_MINIO_PUBLIC_USE_SSL === 'true'
-      : process.env.NEXT_PUBLIC_MINIO_USE_SSL === 'true';
-
-  return [buildOrigin(endpoint, port, useSSL)];
-}
-
-function buildOrigin(endpoint: string, port?: number, useSSL?: boolean): string {
-  const url = endpoint.startsWith('http://') || endpoint.startsWith('https://')
-    ? new URL(endpoint)
-    : new URL(`${useSSL ? 'https' : 'http'}://${endpoint}`);
-
-  if (port && !url.port) {
-    url.port = String(port);
-  }
-
-  return url.origin;
-}
 
 // ============================================
 // 使用方式：在 next.config.ts 中导入
