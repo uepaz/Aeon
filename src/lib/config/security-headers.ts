@@ -19,8 +19,8 @@ export function createSecurityHeaders(): SecurityHeader[] {
       // 默认策略：仅允许同源
       "default-src 'self'",
 
-      // 脚本：允许同源 + Next.js 内联脚本（使用 nonce）+ eval（Turbopack 开发模式需要）
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+      // 脚本：允许同源 + Next.js 内联脚本 + eval（Turbopack） + Cloudflare（部署平台）
+      "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://static.cloudflareinsights.com",
 
       // 样式：允许同源 + 内联样式（Tailwind 需要）
       "style-src 'self' 'unsafe-inline'",
@@ -31,8 +31,8 @@ export function createSecurityHeaders(): SecurityHeader[] {
       // 字体：允许同源 + data URI
       "font-src 'self' data:",
 
-      // 连接：允许同源（/api/storage 代理）+ Supabase API
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+      // 连接：允许同源（/api/storage 代理）+ Supabase API + Cloudflare 分析
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cloudflareinsights.com",
 
       // 媒体：允许同源（MinIO 通过 /api/storage 代理）+ Supabase Storage
       "media-src 'self' https://*.supabase.co",
