@@ -21,128 +21,167 @@ interface PhotoMetadata {
   original_size: number;
 }
 
+// 统一的 Action 返回类型
+type ActionResult<T = unknown> =
+  | { success: true; data: T }
+  | { success: false; error: string };
+
 // 创建记录
-export async function createRecord(data: CreateRecordData) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function createRecord(data: CreateRecordData): Promise<ActionResult<{ id: string }>> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) {
-    throw new Error('Unauthorized');
+    if (!user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const { data: record, error } = await supabase
+      .from('records')
+      .insert({
+        user_id: user.id,
+        title: data.title || null,
+        content: data.content,
+        record_date: data.recordDate,
+        tags: data.tags || [],
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Database error:', error);
+      return {
+        success: false,
+        error: process.env.NODE_ENV === 'production'
+          ? '创建记录失败，请稍后重试'
+          : `创建记录失败: ${error.message}`,
+      };
+    }
+
+    revalidatePath('/');
+    revalidatePath('/timeline');
+    return { success: true, data: record };
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    return { success: false, error: '操作失败，请稍后重试' };
   }
-
-  const { data: record, error } = await supabase
-    .from('records')
-    .insert({
-      user_id: user.id,
-      title: data.title || null,
-      content: data.content,
-      record_date: data.recordDate,
-      tags: data.tags || [],
-    })
-    .select()
-    .single();
-
-  if (error) {
-    throw new Error(`创建记录失败: ${error.message}`);
-  }
-
-  revalidatePath('/');
-  revalidatePath('/timeline');
-  return record;
 }
 
 // 更新记录
 export async function updateRecord(
   recordId: string,
   data: Partial<CreateRecordData>
-) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) {
-    throw new Error('Unauthorized');
+    if (!user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (data.title !== undefined) updateData.title = data.title || null;
+    if (data.content !== undefined) updateData.content = data.content;
+    if (data.recordDate !== undefined) updateData.record_date = data.recordDate;
+    if (data.tags !== undefined) updateData.tags = data.tags;
+
+    const { data: record, error } = await supabase
+      .from('records')
+      .update(updateData)
+      .eq('id', recordId)
+      .eq('user_id', user.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Database error:', error);
+      return {
+        success: false,
+        error: process.env.NODE_ENV === 'production'
+          ? '更新记录失败，请稍后重试'
+          : `更新记录失败: ${error.message}`,
+      };
+    }
+
+    revalidatePath('/');
+    revalidatePath('/timeline');
+    revalidatePath(`/records/${recordId}`);
+    return { success: true, data: record };
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    return { success: false, error: '操作失败，请稍后重试' };
   }
-
-  const updateData: Record<string, unknown> = {};
-  if (data.title !== undefined) updateData.title = data.title || null;
-  if (data.content !== undefined) updateData.content = data.content;
-  if (data.recordDate !== undefined) updateData.record_date = data.recordDate;
-  if (data.tags !== undefined) updateData.tags = data.tags;
-
-  const { data: record, error } = await supabase
-    .from('records')
-    .update(updateData)
-    .eq('id', recordId)
-    .eq('user_id', user.id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new Error(`更新记录失败: ${error.message}`);
-  }
-
-  revalidatePath('/');
-  revalidatePath('/timeline');
-  revalidatePath(`/records/${recordId}`);
-  return record;
 }
 
 // 删除记录 - 支持多种存储方式
-export async function deleteRecord(recordId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function deleteRecord(recordId: string): Promise<ActionResult<void>> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) {
-    throw new Error('Unauthorized');
-  }
-
-  // 获取关联的照片路径
-  const { data: recordPhotos } = await supabase
-    .from('photos')
-    .select('storage_path, thumbnail_path')
-    .eq('record_id', recordId)
-    .eq('user_id', user.id);
-
-  // 删除 Storage 文件（包括缩略图）
-  if (recordPhotos && recordPhotos.length > 0) {
-    const paths: string[] = [];
-    recordPhotos.forEach((p) => {
-      paths.push(p.storage_path);
-      if (p.thumbnail_path) {
-        paths.push(p.thumbnail_path);
-      }
-    });
-
-    // 先删除存储文件，失败则终止操作
-    const { getStorageProvider } = await import('@/lib/storage');
-    const storage = getStorageProvider();
-    const deleteResult = await storage.delete(paths);
-
-    if (!deleteResult.success) {
-      throw new Error('文件删除失败，操作已终止');
+    if (!user) {
+      return { success: false, error: 'Unauthorized' };
     }
+
+    // 获取关联的照片路径
+    const { data: recordPhotos } = await supabase
+      .from('photos')
+      .select('storage_path, thumbnail_path')
+      .eq('record_id', recordId)
+      .eq('user_id', user.id);
+
+    // 删除 Storage 文件（包括缩略图）
+    if (recordPhotos && recordPhotos.length > 0) {
+      const paths: string[] = [];
+      recordPhotos.forEach((p) => {
+        paths.push(p.storage_path);
+        if (p.thumbnail_path) {
+          paths.push(p.thumbnail_path);
+        }
+      });
+
+      // 先删除存储文件，失败则终止操作
+      const { getStorageProvider } = await import('@/lib/storage');
+      const storage = getStorageProvider();
+      const deleteResult = await storage.delete(paths);
+
+      if (!deleteResult.success) {
+        return { success: false, error: '文件删除失败，操作已终止' };
+      }
+    }
+
+    // 存储删除成功后再删除数据库记录（级联删除照片记录）
+    const { error } = await supabase
+      .from('records')
+      .delete()
+      .eq('id', recordId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('Database error:', error);
+      return {
+        success: false,
+        error: process.env.NODE_ENV === 'production'
+          ? '删除记录失败，请稍后重试'
+          : `删除记录失败: ${error.message}`,
+      };
+    }
+
+    revalidatePath('/');
+    revalidatePath('/timeline');
+    revalidatePath('/gallery');
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    return { success: false, error: '操作失败，请稍后重试' };
   }
-
-  // 存储删除成功后再删除数据库记录（级联删除照片记录）
-  const { error } = await supabase
-    .from('records')
-    .delete()
-    .eq('id', recordId)
-    .eq('user_id', user.id);
-
-  if (error) {
-    throw new Error(`删除记录失败: ${error.message}`);
-  }
-
-  revalidatePath('/');
-  revalidatePath('/timeline');
-  revalidatePath('/gallery');
 }
 
 // ============================================
@@ -273,65 +312,77 @@ export async function uploadPhoto(
 }
 
 // 删除照片 - 支持多种存储方式
-export async function deletePhoto(photoId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function deletePhoto(photoId: string): Promise<ActionResult<void>> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) {
-    throw new Error('Unauthorized');
+    if (!user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // 获取照片信息
+    const { data: photo } = await supabase
+      .from('photos')
+      .select('storage_path, thumbnail_path, record_id')
+      .eq('id', photoId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!photo) {
+      return { success: false, error: 'Photo not found' };
+    }
+
+    // 删除 Storage 文件（包括缩略图）
+    const pathsToRemove = [photo.storage_path];
+    if (photo.thumbnail_path) {
+      pathsToRemove.push(photo.thumbnail_path);
+    }
+
+    // 先删除存储文件，失败则终止操作
+    const { getStorageProvider } = await import('@/lib/storage');
+    const storage = getStorageProvider();
+    const deleteResult = await storage.delete(pathsToRemove);
+
+    if (!deleteResult.success) {
+      return { success: false, error: '文件删除失败，操作已终止' };
+    }
+
+    // 存储删除成功后再删除数据库记录
+    const { error } = await supabase
+      .from('photos')
+      .delete()
+      .eq('id', photoId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('Database error:', error);
+      return {
+        success: false,
+        error: process.env.NODE_ENV === 'production'
+          ? '删除照片失败，请稍后重试'
+          : `删除照片失败: ${error.message}`,
+      };
+    }
+
+    // 更新记录的照片计数
+    if (photo.record_id) {
+      await supabase.rpc('decrement_photo_count', {
+        record_id: photo.record_id,
+      });
+    }
+
+    revalidatePath(`/records/${photo.record_id}`);
+    revalidatePath('/timeline');
+    revalidatePath('/');
+    revalidatePath('/gallery');
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error('Unexpected error:', error);
+    return { success: false, error: '操作失败，请稍后重试' };
   }
-
-  // 获取照片信息
-  const { data: photo } = await supabase
-    .from('photos')
-    .select('storage_path, thumbnail_path, record_id')
-    .eq('id', photoId)
-    .eq('user_id', user.id)
-    .single();
-
-  if (!photo) {
-    throw new Error('Photo not found');
-  }
-
-  // 删除 Storage 文件（包括缩略图）
-  const pathsToRemove = [photo.storage_path];
-  if (photo.thumbnail_path) {
-    pathsToRemove.push(photo.thumbnail_path);
-  }
-
-  // 先删除存储文件，失败则终止操作
-  const { getStorageProvider } = await import('@/lib/storage');
-  const storage = getStorageProvider();
-  const deleteResult = await storage.delete(pathsToRemove);
-
-  if (!deleteResult.success) {
-    throw new Error('文件删除失败，操作已终止');
-  }
-
-  // 存储删除成功后再删除数据库记录
-  const { error } = await supabase
-    .from('photos')
-    .delete()
-    .eq('id', photoId)
-    .eq('user_id', user.id);
-
-  if (error) {
-    throw new Error(`删除照片失败: ${error.message}`);
-  }
-
-  // 更新记录的照片计数
-  if (photo.record_id) {
-    await supabase.rpc('decrement_photo_count', {
-      record_id: photo.record_id,
-    });
-  }
-
-  revalidatePath(`/records/${photo.record_id}`);
-  revalidatePath('/timeline');
-  revalidatePath('/');
-  revalidatePath('/gallery');
 }
 
 async function insertPhotoMetadata(

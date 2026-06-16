@@ -317,7 +317,7 @@ export function RecordForm({
 
     try {
       // 创建或更新记录
-      const record =
+      const recordResult =
         mode === 'create'
           ? await createRecord({
               title: data.title,
@@ -327,6 +327,12 @@ export function RecordForm({
             })
           : await updateExistingRecord(recordId, data);
 
+      if (!recordResult.success) {
+        alert(recordResult.error);
+        return;
+      }
+
+      const record = recordResult.data;
       setRecordId(record.id);
 
       // 创建模式：保存成功后，立即上传所有待上传的照片
