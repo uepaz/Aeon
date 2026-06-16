@@ -49,8 +49,10 @@ export function createSecurityHeaders(): SecurityHeader[] {
       // Frame 祖先：禁止（防止点击劫持）
       "frame-ancestors 'none'",
 
-      // 升级不安全请求（HTTP → HTTPS）
-      "upgrade-insecure-requests",
+      // 注意：未启用 upgrade-insecure-requests
+      // 因为 Next.js 通过 HTTP（端口 3000）部署，浏览器会自动将
+      // 资源请求降级为 HTTP。如果服务器启用了 HTTPS，可取消注释。
+      // "upgrade-insecure-requests",
     ].join('; '),
   },
 
