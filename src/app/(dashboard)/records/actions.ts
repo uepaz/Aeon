@@ -119,13 +119,17 @@ export async function deleteRecord(recordId: string) {
       }
     });
 
-    // 使用存储工厂删除文件
+    // 先删除存储文件，失败则终止操作
     const { getStorageProvider } = await import('@/lib/storage');
     const storage = getStorageProvider();
-    await storage.delete(paths);
+    const deleteResult = await storage.delete(paths);
+
+    if (!deleteResult.success) {
+      throw new Error('文件删除失败，操作已终止');
+    }
   }
 
-  // 删除记录（级联删除照片记录）
+  // 存储删除成功后再删除数据库记录（级联删除照片记录）
   const { error } = await supabase
     .from('records')
     .delete()
@@ -285,12 +289,16 @@ export async function deletePhoto(photoId: string) {
     pathsToRemove.push(photo.thumbnail_path);
   }
 
-  // 使用存储工厂删除文件
+  // 先删除存储文件，失败则终止操作
   const { getStorageProvider } = await import('@/lib/storage');
   const storage = getStorageProvider();
-  await storage.delete(pathsToRemove);
+  const deleteResult = await storage.delete(pathsToRemove);
 
-  // 删除数据库记录
+  if (!deleteResult.success) {
+    throw new Error('文件删除失败，操作已终止');
+  }
+
+  // 存储删除成功后再删除数据库记录
   const { error } = await supabase
     .from('photos')
     .delete()
