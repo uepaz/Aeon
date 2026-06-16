@@ -14,12 +14,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { CalendarIcon, Upload, X } from 'lucide-react';
+import { CalendarIcon, Upload, X, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { validateImageFile } from '@/lib/utils/image';
 import { buildImageFileName, withImageFileName } from '@/lib/utils/image-files';
+import { generateThumbnail } from '@/lib/utils/compress-image';
 import {
   createRecord,
   deletePhoto,
@@ -44,8 +45,10 @@ type UploadStatus = 'pending' | 'uploading' | 'success' | 'failed';
 
 interface FileUploadState {
   file: File;
+  thumbnail?: File; // 客户端生成的缩略图
   status: UploadStatus;
   error?: string;
+  retryCount: number; // 重试次数
 }
 
 export function RecordForm({
@@ -133,7 +136,7 @@ export function RecordForm({
     // 初始化上传状态
     const initialStates = new Map<number, FileUploadState>();
     uploadedFiles.forEach((file, index) => {
-      initialStates.set(index, { file, status: 'pending' });
+      initialStates.set(index, { file, status: 'pending', retryCount: 0 });
     });
     setUploadStates(initialStates);
 
@@ -149,84 +152,111 @@ export function RecordForm({
             })
           : await updateExistingRecord(defaultValues?.id, data);
 
-      // 并行上传照片（限制并发数为 3）
+      // Phase 1: 客户端压缩 + 自适应并发上传
       if (uploadedFiles.length > 0 && record) {
-        const CONCURRENCY = 3;
-        const results: Array<{ index: number; success: boolean; error?: string }> = [];
+        // 动态并发数：根据文件数量自适应（2-5）
+        const CONCURRENCY = Math.min(5, Math.max(2, Math.ceil(uploadedFiles.length / 3)));
 
-        // 分批并行上传
-        for (let i = 0; i < uploadedFiles.length; i += CONCURRENCY) {
-          const batch = uploadedFiles.slice(i, i + CONCURRENCY);
-          const batchPromises = batch.map(async (file, batchIndex) => {
-            const fileIndex = i + batchIndex;
+        const uploadFile = async (fileIndex: number): Promise<{ index: number; success: boolean; error?: string }> => {
+          const state = uploadStates.get(fileIndex);
+          if (!state || state.status === 'success') {
+            return { index: fileIndex, success: true };
+          }
 
-            // 更新状态为上传中
+          // 更新状态为上传中
+          setUploadStates(prev => {
+            const next = new Map(prev);
+            const currentState = next.get(fileIndex);
+            if (currentState) {
+              next.set(fileIndex, { ...currentState, status: 'uploading' });
+            }
+            return next;
+          });
+
+          try {
+            const file = state.file;
+
+            // Phase 1: 客户端生成缩略图（异步，不阻塞）
+            let thumbnailFile: File | undefined;
+            try {
+              thumbnailFile = await generateThumbnail(file);
+            } catch (error) {
+              console.warn(`Failed to generate thumbnail for ${file.name}:`, error);
+              // 缩略图失败不影响上传，继续用原图
+            }
+
+            // 构建原图文件名
+            const originalUploadFile = withImageFileName(
+              file,
+              buildImageFileName(file.name, file.type)
+            );
+
+            const formData = new FormData();
+            formData.append('originalFile', originalUploadFile, originalUploadFile.name);
+            if (thumbnailFile) {
+              formData.append('thumbnailFile', thumbnailFile, thumbnailFile.name);
+            }
+
+            const result = await uploadPhoto(record.id, formData);
+
+            // 更新状态
             setUploadStates(prev => {
               const next = new Map(prev);
-              const state = next.get(fileIndex);
-              if (state) {
-                next.set(fileIndex, { ...state, status: 'uploading' });
+              const currentState = next.get(fileIndex);
+              if (currentState) {
+                next.set(fileIndex, {
+                  ...currentState,
+                  status: result.success ? 'success' : 'failed',
+                  error: result.error,
+                  thumbnail: thumbnailFile,
+                });
               }
               return next;
             });
 
-            try {
-              const originalUploadFile = withImageFileName(
-                file,
-                buildImageFileName(file.name, file.type)
-              );
+            return { index: fileIndex, success: result.success, error: result.error };
+          } catch (error) {
+            setUploadStates(prev => {
+              const next = new Map(prev);
+              const currentState = next.get(fileIndex);
+              if (currentState) {
+                next.set(fileIndex, {
+                  ...currentState,
+                  status: 'failed',
+                  error: error instanceof Error ? error.message : '上传失败',
+                });
+              }
+              return next;
+            });
 
-              const formData = new FormData();
-              formData.append('originalFile', originalUploadFile, originalUploadFile.name);
+            return {
+              index: fileIndex,
+              success: false,
+              error: error instanceof Error ? error.message : '上传失败',
+            };
+          }
+        };
 
-              const result = await uploadPhoto(record.id, formData);
-
-              // 更新状态
-              setUploadStates(prev => {
-                const next = new Map(prev);
-                const state = next.get(fileIndex);
-                if (state) {
-                  next.set(fileIndex, {
-                    ...state,
-                    status: result.success ? 'success' : 'failed',
-                    error: result.error,
-                  });
-                }
-                return next;
-              });
-
-              return { index: fileIndex, success: result.success, error: result.error };
-            } catch (error) {
-              setUploadStates(prev => {
-                const next = new Map(prev);
-                const state = next.get(fileIndex);
-                if (state) {
-                  next.set(fileIndex, {
-                    ...state,
-                    status: 'failed',
-                    error: error instanceof Error ? error.message : '上传失败',
-                  });
-                }
-                return next;
-              });
-
-              return {
-                index: fileIndex,
-                success: false,
-                error: error instanceof Error ? error.message : '上传失败',
-              };
-            }
-          });
-
-          const batchResults = await Promise.all(batchPromises);
+        // 并发上传（动态并发控制）
+        const results: Array<{ index: number; success: boolean; error?: string }> = [];
+        for (let i = 0; i < uploadedFiles.length; i += CONCURRENCY) {
+          const batch = Array.from(
+            { length: Math.min(CONCURRENCY, uploadedFiles.length - i) },
+            (_, idx) => i + idx
+          );
+          const batchResults = await Promise.all(batch.map(uploadFile));
           results.push(...batchResults);
         }
 
-        // 统计上传结果
+        // 统计上传结果（Phase 1: 失败不阻塞，继续完成流程）
         const failedCount = results.filter(r => !r.success).length;
         if (failedCount > 0) {
-          alert(`${failedCount} 张照片上传失败，请重试`);
-          return; // 不跳转，让用户查看失败详情
+          alert(
+            `${failedCount} 张照片上传失败。\n` +
+            `成功：${results.length - failedCount} 张\n\n` +
+            `请在下方点击「重试」按钮重新上传失败项。`
+          );
+          // Phase 1 改进：不 return，允许用户查看并重试
         }
       }
 
@@ -237,6 +267,98 @@ export function RecordForm({
       alert('保存失败');
     } finally {
       setUploading(false);
+    }
+  };
+
+  // Phase 1: 单项重试功能
+  const retryUpload = async (fileIndex: number) => {
+    if (!defaultValues?.id) {
+      alert('请先保存记录');
+      return;
+    }
+
+    const state = uploadStates.get(fileIndex);
+    if (!state || state.status === 'success') {
+      return;
+    }
+
+    // 限制重试次数
+    if (state.retryCount >= 3) {
+      alert('该照片已重试 3 次失败，请检查网络或文件');
+      return;
+    }
+
+    // 更新状态为上传中
+    setUploadStates(prev => {
+      const next = new Map(prev);
+      const currentState = next.get(fileIndex);
+      if (currentState) {
+        next.set(fileIndex, {
+          ...currentState,
+          status: 'uploading',
+          retryCount: currentState.retryCount + 1,
+        });
+      }
+      return next;
+    });
+
+    try {
+      const file = state.file;
+
+      // 尝试生成缩略图（可能之前失败了）
+      let thumbnailFile: File | undefined = state.thumbnail;
+      if (!thumbnailFile) {
+        try {
+          thumbnailFile = await generateThumbnail(file);
+        } catch (error) {
+          console.warn(`Retry: Failed to generate thumbnail for ${file.name}:`, error);
+        }
+      }
+
+      const originalUploadFile = withImageFileName(
+        file,
+        buildImageFileName(file.name, file.type)
+      );
+
+      const formData = new FormData();
+      formData.append('originalFile', originalUploadFile, originalUploadFile.name);
+      if (thumbnailFile) {
+        formData.append('thumbnailFile', thumbnailFile, thumbnailFile.name);
+      }
+
+      const result = await uploadPhoto(defaultValues.id, formData);
+
+      // 更新状态
+      setUploadStates(prev => {
+        const next = new Map(prev);
+        const currentState = next.get(fileIndex);
+        if (currentState) {
+          next.set(fileIndex, {
+            ...currentState,
+            status: result.success ? 'success' : 'failed',
+            error: result.error,
+            thumbnail: thumbnailFile,
+          });
+        }
+        return next;
+      });
+
+      if (result.success) {
+        router.refresh();
+      }
+    } catch (error) {
+      setUploadStates(prev => {
+        const next = new Map(prev);
+        const currentState = next.get(fileIndex);
+        if (currentState) {
+          next.set(fileIndex, {
+            ...currentState,
+            status: 'failed',
+            error: error instanceof Error ? error.message : '上传失败',
+          });
+        }
+        return next;
+      });
     }
   };
 
@@ -365,11 +487,25 @@ export function RecordForm({
                       {file.name}
                     </span>
 
-                    {/* 错误提示 */}
-                    {status === 'failed' && state?.error && (
-                      <span className="text-red-500 text-xs">
-                        {state.error}
-                      </span>
+                    {/* 错误提示与重试按钮 */}
+                    {status === 'failed' && (
+                      <>
+                        {state?.error && (
+                          <span className="text-red-500 text-xs max-w-[120px] truncate">
+                            {state.error}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => retryUpload(index)}
+                          disabled={state?.status === 'uploading'}
+                          className="flex items-center gap-1 text-primary hover:text-primary/80 disabled:opacity-50"
+                          title="重试上传"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>重试</span>
+                        </button>
+                      </>
                     )}
                   </div>
                 );

@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { validatePhotoUpload } from '@/lib/validations/file';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import sharp from 'sharp';
+import type { UploadResult } from '@/lib/storage/types';
 
 interface CreateRecordData {
   title?: string;
@@ -142,8 +142,12 @@ export async function deleteRecord(recordId: string) {
 }
 
 // ============================================
-// 上传照片 - 增强安全版本
+// 上传照片 - Phase 1 优化版本
 // ============================================
+// 改进：
+// 1. 移除服务端 Sharp 处理（缩略图在客户端生成）
+// 2. 接收前端传来的原图 + 缩略图，直接上传
+// 3. 服务端只负责验证、存储、数据库记录
 export async function uploadPhoto(
   recordId: string,
   formData: FormData
@@ -158,6 +162,7 @@ export async function uploadPhoto(
   }
 
   const originalFile = formData.get('originalFile') as File;
+  const thumbnailFile = formData.get('thumbnailFile') as File | null;
 
   // ========== 1. 基础检查 ==========
   if (!originalFile) {
@@ -190,21 +195,6 @@ export async function uploadPhoto(
     const { getStorageProvider } = await import('@/lib/storage');
     const storage = getStorageProvider();
 
-    // 生成缩略图（200px）
-    const arrayBuffer = await originalFile.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    const thumbnailBuffer = await sharp(buffer)
-      .resize(200, 200, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 80 })
-      .toBuffer();
-
-    const thumbnailFile = new File(
-      [new Uint8Array(thumbnailBuffer)],
-      `thumb_${originalFile.name.replace(/\.[^.]+$/, '.jpg')}`,
-      { type: 'image/jpeg' }
-    );
-
     // 上传原图
     const uploadResult = await storage.upload(
       originalFile,
@@ -216,12 +206,15 @@ export async function uploadPhoto(
       return { success: false, error: uploadResult.error };
     }
 
-    // 上传缩略图
-    const thumbnailResult = await storage.upload(
-      thumbnailFile,
-      user.id,
-      recordId
-    );
+    // 上传缩略图（如果前端提供）
+    let thumbnailResult: UploadResult = { success: false };
+    if (thumbnailFile) {
+      thumbnailResult = await storage.upload(
+        thumbnailFile,
+        user.id,
+        recordId
+      );
+    }
 
     const photoData = {
       user_id: user.id,
