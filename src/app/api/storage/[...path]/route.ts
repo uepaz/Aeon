@@ -47,17 +47,21 @@ export async function GET(
     }
 
     // 构建 MinIO 客户端（容器内连接）
+    // 优先使用 S3_* 环境变量，回退到 NEXT_PUBLIC_MINIO_* 或 MINIO_ROOT_*
+    const endpoint = process.env.S3_ENDPOINT ||
+      `http${process.env.NEXT_PUBLIC_MINIO_USE_SSL === 'true' ? 's' : ''}://${process.env.NEXT_PUBLIC_MINIO_ENDPOINT || 'minio'}:${process.env.NEXT_PUBLIC_MINIO_PORT || '9000'}`;
+
     const minioClient = new S3Client({
       region: 'us-east-1',
-      endpoint: process.env.S3_ENDPOINT || 'http://minio:9000',
+      endpoint,
       credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY || process.env.MINIO_ROOT_USER || 'minioadmin',
-        secretAccessKey: process.env.S3_SECRET_KEY || process.env.MINIO_ROOT_PASSWORD || 'minioadmin',
+        accessKeyId: process.env.S3_ACCESS_KEY || process.env.NEXT_PUBLIC_MINIO_ACCESS_KEY || process.env.MINIO_ROOT_USER || 'minioadmin',
+        secretAccessKey: process.env.S3_SECRET_KEY || process.env.NEXT_PUBLIC_MINIO_SECRET_KEY || process.env.MINIO_ROOT_PASSWORD || 'minioadmin',
       },
       forcePathStyle: true,
     });
 
-    const bucket = process.env.S3_BUCKET || 'record-photos';
+    const bucket = process.env.S3_BUCKET || process.env.NEXT_PUBLIC_MINIO_BUCKET || 'aeon-photos';
 
     // 从 MinIO 拉取文件
     const command = new GetObjectCommand({
