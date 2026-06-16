@@ -40,6 +40,14 @@ interface RecordFormProps {
   mode: 'create' | 'edit';
 }
 
+type UploadStatus = 'pending' | 'uploading' | 'success' | 'failed';
+
+interface FileUploadState {
+  file: File;
+  status: UploadStatus;
+  error?: string;
+}
+
 export function RecordForm({
   defaultValues,
   initialPhotos = [],
@@ -48,6 +56,7 @@ export function RecordForm({
   const [existingPhotos, setExistingPhotos] = useState(initialPhotos);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadStates, setUploadStates] = useState<Map<number, FileUploadState>>(new Map());
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const router = useRouter();
 
@@ -78,6 +87,9 @@ export function RecordForm({
 
       setUploadedFiles((prev) => [...prev, file]);
     }
+
+    // Reset input to allow re-selecting the same files
+    e.target.value = '';
   };
 
   const removeFile = (index: number) => {
@@ -117,6 +129,14 @@ export function RecordForm({
 
   const onSubmit = async (data: RecordFormData) => {
     setUploading(true);
+
+    // 初始化上传状态
+    const initialStates = new Map<number, FileUploadState>();
+    uploadedFiles.forEach((file, index) => {
+      initialStates.set(index, { file, status: 'pending' });
+    });
+    setUploadStates(initialStates);
+
     try {
       // 创建或更新记录
       const record =
@@ -129,22 +149,84 @@ export function RecordForm({
             })
           : await updateExistingRecord(defaultValues?.id, data);
 
-      // 上传照片：自建 MinIO 只保存原图
+      // 并行上传照片（限制并发数为 3）
       if (uploadedFiles.length > 0 && record) {
-        for (const file of uploadedFiles) {
-          const originalUploadFile = withImageFileName(
-            file,
-            buildImageFileName(file.name, file.type)
-          );
+        const CONCURRENCY = 3;
+        const results: Array<{ index: number; success: boolean; error?: string }> = [];
 
-          const formData = new FormData();
-          formData.append('originalFile', originalUploadFile, originalUploadFile.name);
+        // 分批并行上传
+        for (let i = 0; i < uploadedFiles.length; i += CONCURRENCY) {
+          const batch = uploadedFiles.slice(i, i + CONCURRENCY);
+          const batchPromises = batch.map(async (file, batchIndex) => {
+            const fileIndex = i + batchIndex;
 
-          const result = await uploadPhoto(record.id, formData);
-          if (!result.success) {
-            console.error(`上传照片失败: ${result.error}`);
-            alert(`部分照片上传失败: ${result.error}`);
-          }
+            // 更新状态为上传中
+            setUploadStates(prev => {
+              const next = new Map(prev);
+              const state = next.get(fileIndex);
+              if (state) {
+                next.set(fileIndex, { ...state, status: 'uploading' });
+              }
+              return next;
+            });
+
+            try {
+              const originalUploadFile = withImageFileName(
+                file,
+                buildImageFileName(file.name, file.type)
+              );
+
+              const formData = new FormData();
+              formData.append('originalFile', originalUploadFile, originalUploadFile.name);
+
+              const result = await uploadPhoto(record.id, formData);
+
+              // 更新状态
+              setUploadStates(prev => {
+                const next = new Map(prev);
+                const state = next.get(fileIndex);
+                if (state) {
+                  next.set(fileIndex, {
+                    ...state,
+                    status: result.success ? 'success' : 'failed',
+                    error: result.error,
+                  });
+                }
+                return next;
+              });
+
+              return { index: fileIndex, success: result.success, error: result.error };
+            } catch (error) {
+              setUploadStates(prev => {
+                const next = new Map(prev);
+                const state = next.get(fileIndex);
+                if (state) {
+                  next.set(fileIndex, {
+                    ...state,
+                    status: 'failed',
+                    error: error instanceof Error ? error.message : '上传失败',
+                  });
+                }
+                return next;
+              });
+
+              return {
+                index: fileIndex,
+                success: false,
+                error: error instanceof Error ? error.message : '上传失败',
+              };
+            }
+          });
+
+          const batchResults = await Promise.all(batchPromises);
+          results.push(...batchResults);
+        }
+
+        // 统计上传结果
+        const failedCount = results.filter(r => !r.success).length;
+        if (failedCount > 0) {
+          alert(`${failedCount} 张照片上传失败，请重试`);
+          return; // 不跳转，让用户查看失败详情
         }
       }
 
@@ -227,6 +309,75 @@ export function RecordForm({
       {/* 照片上传 */}
       <div className="space-y-4">
         <Label>照片 (可选)</Label>
+
+        {/* 上传进度提示 */}
+        {uploading && uploadedFiles.length > 0 && (
+          <div className="bg-muted/50 border border-border rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium">上传进度</span>
+              <span className="text-muted-foreground">
+                {Array.from(uploadStates.values()).filter(s => s.status === 'success').length} / {uploadedFiles.length}
+              </span>
+            </div>
+
+            {/* 进度条 */}
+            <div className="w-full bg-background rounded-full h-2 overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300"
+                style={{
+                  width: `${(Array.from(uploadStates.values()).filter(s => s.status === 'success').length / uploadedFiles.length) * 100}%`
+                }}
+              />
+            </div>
+
+            {/* 文件列表 */}
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {uploadedFiles.map((file, index) => {
+                const state = uploadStates.get(index);
+                const status = state?.status || 'pending';
+
+                return (
+                  <div key={index} className="flex items-center gap-2 text-xs">
+                    {/* 状态图标 */}
+                    {status === 'pending' && (
+                      <div className="w-4 h-4 rounded-full border-2 border-muted-foreground/30" />
+                    )}
+                    {status === 'uploading' && (
+                      <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                    )}
+                    {status === 'success' && (
+                      <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
+                    {status === 'failed' && (
+                      <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </div>
+                    )}
+
+                    {/* 文件名 */}
+                    <span className="flex-1 truncate text-muted-foreground">
+                      {file.name}
+                    </span>
+
+                    {/* 错误提示 */}
+                    {status === 'failed' && state?.error && (
+                      <span className="text-red-500 text-xs">
+                        {state.error}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-4">
           {existingPhotos.map((photo) => (
             <div key={photo.id} className="relative w-24 h-24">
