@@ -35,6 +35,7 @@ export default function SettingsPage() {
   const [welcomeMessage, setWelcomeMessage] = useState('');
   const [quoteApiUrl, setQuoteApiUrl] = useState('');
   const [showcasePublic, setShowcasePublic] = useState(false);
+  const [showLimit, setShowLimit] = useState(20);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [birthdayOpen, setBirthdayOpen] = useState(false);
@@ -52,7 +53,7 @@ export default function SettingsPage() {
       if (user) {
         const { data } = await supabase
           .from('user_settings')
-          .select('anniversary_date, birthday1, birthday2, name1, name2, welcome_message, quote_api_url, showcase_public')
+          .select('anniversary_date, birthday1, birthday2, name1, name2, welcome_message, quote_api_url, showcase_public, show_limit')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -65,6 +66,7 @@ export default function SettingsPage() {
           if (data.welcome_message) setWelcomeMessage(data.welcome_message);
           if (data.quote_api_url) setQuoteApiUrl(data.quote_api_url);
           setShowcasePublic(data.showcase_public ?? false);
+          setShowLimit(data.show_limit ?? 20);
         }
       }
     };
@@ -93,6 +95,7 @@ export default function SettingsPage() {
           welcome_message: welcomeMessage || null,
           quote_api_url: quoteApiUrl || null,
           showcase_public: showcasePublic,
+          show_limit: showLimit,
         },
         {
           onConflict: 'user_id',
@@ -150,6 +153,32 @@ export default function SettingsPage() {
                   checked={showcasePublic}
                   onCheckedChange={setShowcasePublic}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="show-limit">照片数量</Label>
+                <div className="flex items-center gap-4">
+                  <Input
+                    id="show-limit"
+                    type="number"
+                    min={5}
+                    max={100}
+                    value={showLimit}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val) && val >= 5 && val <= 100) {
+                        setShowLimit(val);
+                      }
+                    }}
+                    className="w-24"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    首页动画使用的照片池大小（5-100）
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  数值越大，照片越不容易重复，但首屏加载越慢
+                </p>
               </div>
             </CardContent>
           </Card>
