@@ -83,13 +83,19 @@ export async function GET(
     }
     const buffer = Buffer.concat(chunks);
 
+    // 生成 ETag 用于缓存验证
+    const crypto = require('crypto');
+    const etag = crypto.createHash('md5').update(buffer).digest('hex');
+
     // 返回文件流
     return new NextResponse(buffer, {
       status: 200,
       headers: {
         'Content-Type': response.ContentType || 'application/octet-stream',
         'Content-Length': String(buffer.length),
-        'Cache-Control': 'private, max-age=3600',
+        // 强缓存：1 年有效期，不可变资源
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'ETag': `"${etag}"`,
         // 防止代理 URL 被外部站点盗用
         'X-Content-Type-Options': 'nosniff',
       },

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { validatePhotoUpload } from '@/lib/validations/file';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import sharp from 'sharp';
 
 interface CreateRecordData {
   title?: string;
@@ -16,6 +17,7 @@ interface PhotoMetadata {
   user_id: string;
   record_id: string;
   storage_path: string;
+  thumbnail_path?: string;
   original_size: number;
 }
 
@@ -103,13 +105,19 @@ export async function deleteRecord(recordId: string) {
   // 获取关联的照片路径
   const { data: recordPhotos } = await supabase
     .from('photos')
-    .select('storage_path')
+    .select('storage_path, thumbnail_path')
     .eq('record_id', recordId)
     .eq('user_id', user.id);
 
-  // 删除 Storage 文件
+  // 删除 Storage 文件（包括缩略图）
   if (recordPhotos && recordPhotos.length > 0) {
-    const paths = recordPhotos.map((p) => p.storage_path);
+    const paths: string[] = [];
+    recordPhotos.forEach((p) => {
+      paths.push(p.storage_path);
+      if (p.thumbnail_path) {
+        paths.push(p.thumbnail_path);
+      }
+    });
 
     // 使用存储工厂删除文件
     const { getStorageProvider } = await import('@/lib/storage');
@@ -182,6 +190,22 @@ export async function uploadPhoto(
     const { getStorageProvider } = await import('@/lib/storage');
     const storage = getStorageProvider();
 
+    // 生成缩略图（200px）
+    const arrayBuffer = await originalFile.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const thumbnailBuffer = await sharp(buffer)
+      .resize(200, 200, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+
+    const thumbnailFile = new File(
+      [new Uint8Array(thumbnailBuffer)],
+      `thumb_${originalFile.name.replace(/\.[^.]+$/, '.jpg')}`,
+      { type: 'image/jpeg' }
+    );
+
+    // 上传原图
     const uploadResult = await storage.upload(
       originalFile,
       user.id,
@@ -192,10 +216,18 @@ export async function uploadPhoto(
       return { success: false, error: uploadResult.error };
     }
 
+    // 上传缩略图
+    const thumbnailResult = await storage.upload(
+      thumbnailFile,
+      user.id,
+      recordId
+    );
+
     const photoData = {
       user_id: user.id,
       record_id: recordId,
       storage_path: uploadResult.originalPath!,
+      thumbnail_path: thumbnailResult.success ? thumbnailResult.originalPath : undefined,
       original_size: originalFile.size,
     };
 
@@ -206,8 +238,12 @@ export async function uploadPhoto(
     );
 
     if (dbError || !photo) {
-      // 回滚：删除已上传的文件
-      await storage.delete([uploadResult.originalPath!]);
+      // 回滚：删除已上传的文件（包括缩略图）
+      const pathsToDelete = [uploadResult.originalPath!];
+      if (thumbnailResult.success && thumbnailResult.originalPath) {
+        pathsToDelete.push(thumbnailResult.originalPath);
+      }
+      await storage.delete(pathsToDelete);
       return { success: false, error: dbError?.message || '照片记录保存失败' };
     }
 
@@ -241,7 +277,7 @@ export async function deletePhoto(photoId: string) {
   // 获取照片信息
   const { data: photo } = await supabase
     .from('photos')
-    .select('storage_path, record_id')
+    .select('storage_path, thumbnail_path, record_id')
     .eq('id', photoId)
     .eq('user_id', user.id)
     .single();
@@ -250,8 +286,11 @@ export async function deletePhoto(photoId: string) {
     throw new Error('Photo not found');
   }
 
-  // 删除 Storage 文件
+  // 删除 Storage 文件（包括缩略图）
   const pathsToRemove = [photo.storage_path];
+  if (photo.thumbnail_path) {
+    pathsToRemove.push(photo.thumbnail_path);
+  }
 
   // 使用存储工厂删除文件
   const { getStorageProvider } = await import('@/lib/storage');

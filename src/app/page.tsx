@@ -45,15 +45,16 @@ export default async function ShowcasePage() {
     return <ShowcaseClient images={[]} />;
   }
 
-  // 获取照片
+  // 获取照片（优先使用缩略图）
   const { data: photos } = await supabase
     .from('photos')
-    .select('storage_path')
+    .select('storage_path, thumbnail_path')
     .order('uploaded_at', { ascending: false })
     .limit(showLimit);
 
   const storage = getStorageProvider();
-  const paths = photos?.map((photo) => photo.storage_path) || [];
+  // 优先使用缩略图，回退到原图
+  const paths = photos?.map((photo) => photo.thumbnail_path || photo.storage_path) || [];
   const urlMap = paths.length > 0
     ? await storage.getSignedUrls(paths, 3600)
     : new Map<string, string>();

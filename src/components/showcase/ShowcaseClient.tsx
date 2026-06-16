@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Inter, Noto_Serif_SC } from 'next/font/google';
 import { createClient } from '@/lib/supabase/client';
@@ -25,6 +25,8 @@ interface ShowcaseClientProps {
 
 export function ShowcaseClient({ images }: ShowcaseClientProps) {
   const router = useRouter();
+  const [loadedImages, setLoadedImages] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const handleClick = async () => {
@@ -40,8 +42,39 @@ export function ShowcaseClient({ images }: ShowcaseClientProps) {
     return () => document.body.removeEventListener('click', handleClick);
   }, [router]);
 
+  // 预加载所有图片
   useEffect(() => {
-    if (images.length === 0) return;
+    if (images.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+
+    let loadedCount = 0;
+    const newLoadedImages: string[] = [];
+
+    images.forEach((src, index) => {
+      const img = new Image();
+      img.onload = () => {
+        loadedCount++;
+        newLoadedImages.push(src);
+        setLoadedImages([...newLoadedImages]);
+
+        if (loadedCount === images.length) {
+          setIsLoading(false);
+        }
+      };
+      img.onerror = () => {
+        loadedCount++;
+        if (loadedCount === images.length) {
+          setIsLoading(false);
+        }
+      };
+      img.src = src;
+    });
+  }, [images]);
+
+  useEffect(() => {
+    if (loadedImages.length === 0) return;
 
     const container = document.getElementById('memoryContainer');
     if (!container) return;
@@ -50,7 +83,7 @@ export function ShowcaseClient({ images }: ShowcaseClientProps) {
 
     function spawnMemory() {
       const img = document.createElement('img');
-      img.src = images[Math.floor(Math.random() * images.length)];
+      img.src = loadedImages[Math.floor(Math.random() * loadedImages.length)];
       img.className = 'memory-flash';
 
       img.onload = () => {
@@ -95,7 +128,7 @@ export function ShowcaseClient({ images }: ShowcaseClientProps) {
       clearInterval(memorySpawns);
       clearInterval(irregularSpawns);
     };
-  }, [images]);
+  }, [loadedImages]);
 
   return (
     <>
@@ -209,6 +242,18 @@ export function ShowcaseClient({ images }: ShowcaseClientProps) {
 
       <div className="memory-container" id="memoryContainer" />
       <div className="vignette" />
+
+      {/* 加载指示器 */}
+      {isLoading && images.length > 0 && (
+        <div className="fixed inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <div className="text-center space-y-4 px-4">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-text-secondary border-t-accent"></div>
+            <p className="text-lg text-text-secondary">
+              加载照片中... {loadedImages.length}/{images.length}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* 空状态提示 */}
       {images.length === 0 && (
