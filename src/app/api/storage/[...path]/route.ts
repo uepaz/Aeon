@@ -21,11 +21,23 @@ export async function GET(
       return NextResponse.json({ error: 'Path is required' }, { status: 400 });
     }
 
+    // 清理路径段，防止路径遍历攻击
+    const sanitizedSegments = pathSegments.map((segment) =>
+      segment
+        .replace(/\.\./g, '') // 移除 ..
+        .replace(/[\/\\]/g, '') // 移除 / 和 \
+        .trim()
+    ).filter(Boolean); // 移除空字符串
+
+    if (sanitizedSegments.length === 0) {
+      return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
+    }
+
     // 路径格式：{userId}/{recordId}/{filename}
-    const objectKey = pathSegments.join('/');
+    const objectKey = sanitizedSegments.join('/');
 
     // 从路径中提取 userId
-    const userIdFromPath = pathSegments[0];
+    const userIdFromPath = sanitizedSegments[0];
 
     // 验证用户身份
     const supabase = await createClient();
@@ -47,16 +59,27 @@ export async function GET(
     }
 
     // 构建 MinIO 客户端（容器内连接）
-    // 优先使用 S3_* 环境变量，回退到 NEXT_PUBLIC_MINIO_* 或 MINIO_ROOT_*
+    // 仅使用服务端环境变量，不暴露到客户端
     const endpoint = process.env.S3_ENDPOINT ||
       `http${process.env.NEXT_PUBLIC_MINIO_USE_SSL === 'true' ? 's' : ''}://${process.env.NEXT_PUBLIC_MINIO_ENDPOINT || 'minio'}:${process.env.NEXT_PUBLIC_MINIO_PORT || '9000'}`;
+
+    const accessKeyId = process.env.S3_ACCESS_KEY || process.env.MINIO_ACCESS_KEY;
+    const secretAccessKey = process.env.S3_SECRET_KEY || process.env.MINIO_SECRET_KEY;
+
+    if (!accessKeyId || !secretAccessKey) {
+      console.error('MinIO credentials not configured for storage proxy');
+      return NextResponse.json(
+        { error: 'Storage service not configured' },
+        { status: 503 }
+      );
+    }
 
     const minioClient = new S3Client({
       region: 'us-east-1',
       endpoint,
       credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY || process.env.NEXT_PUBLIC_MINIO_ACCESS_KEY || process.env.MINIO_ROOT_USER || 'minioadmin',
-        secretAccessKey: process.env.S3_SECRET_KEY || process.env.NEXT_PUBLIC_MINIO_SECRET_KEY || process.env.MINIO_ROOT_PASSWORD || 'minioadmin',
+        accessKeyId,
+        secretAccessKey,
       },
       forcePathStyle: true,
     });
